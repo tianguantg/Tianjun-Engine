@@ -1,0 +1,211 @@
+.overview-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--space-md);
+}
+
+.overview-engine {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  margin-bottom: var(--space-md);
+}
+
+.overview-bottom {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  margin-bottom: var(--space-md);
+}
+
+.kpi-core .metric-value {
+  font-size: clamp(2.5rem, 3vw, 3rem);
+}
+
+.secondary-metric .metric-value {
+  font-size: clamp(1.75rem, 2.2vw, 2rem);
+  font-weight: 500;
+}
+
+.capacity-matrix {
+  display: grid;
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+  height: calc(100% - 2.25rem);
+}
+
+.capacity-card,
+.queue-card {
+  height: 100%;
+}
+
+.capacity-row {
+  display: grid;
+  grid-template-columns: minmax(0, .8fr) repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-md);
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card-alt);
+}
+
+.capacity-title {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.capacity-title span,
+.capacity-metric span {
+  color: var(--color-gray-500);
+  font-size: var(--font-size-xs);
+}
+
+.capacity-metric {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.capacity-track {
+  height: .75rem;
+  border-radius: 999rem;
+  background: var(--color-gray-100);
+}
+
+.capacity-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-success-500);
+}
+
+.capacity-metric.warning .capacity-track i {
+  background: var(--color-warning-500);
+}
+
+.capacity-metric.danger .capacity-track i {
+  background: var(--color-danger-500);
+}
+
+.queue-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.queue-column {
+  min-height: 14rem;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 0.0625rem solid var(--color-gray-200);
+  background: var(--color-bg-card-alt);
+}
+
+.queue-column strong {
+  display: block;
+  margin: var(--space-sm) 0;
+  font-size: clamp(1.75rem, 2.4vw, 2rem);
+  font-weight: 500;
+  color: var(--color-primary-500);
+}
+
+.queue-column span,
+.queue-list em {
+  color: var(--color-gray-500);
+  font-style: normal;
+  font-size: var(--font-size-xs);
+}
+
+.queue-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+}
+
+.queue-list em {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.queue-list em span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.queue-release-btn {
+  flex: 0 0 auto;
+  border: 0.5px solid rgba(239, 68, 68, 0.28);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-50);
+  color: var(--color-danger-500);
+  padding: 2px 7px;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.queue-release-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.sla-alert-card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-sm);
+  min-height: 100%;
+  border-color: var(--color-danger-500);
+  background: var(--color-danger-50);
+  cursor: pointer;
+}
+
+.sla-alert-number {
+  color: var(--color-danger-500);
+  font-size: clamp(3rem, 4vw, 4.5rem);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sla-alert-card p {
+  color: var(--color-gray-700);
+}
+
+.sla-alert-card b {
+  color: var(--color-danger-500);
+}
+
+.decision-wide .list-item {
+  background: var(--color-bg-card);
+}
+
+#overviewDecision {
+  max-height: 41rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-xs);
+  scrollbar-gutter: stable;
+}
+
+.decision-rich {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+@media (max-width: 1280px) {
+  .overview-engine,
+  .overview-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .capacity-matrix {
+    height: auto;
+  }
+}
+
+@media (max-width: 1024px) {
+  .overview-metrics,
+  .capacity-row,
+  .queue-columns {
+    grid-template-columns: 1fr;
+  }
+}

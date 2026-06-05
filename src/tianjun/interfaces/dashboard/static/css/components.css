@@ -1,0 +1,90 @@
+.card {
+  background: var(--color-bg-card);
+  border: 0.5px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--color-gray-900) 6%, transparent);
+}
+.card-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-gray-900);
+  border-left: 3px solid var(--color-primary-500);
+  padding-left: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+.title-primary { border-color: var(--color-primary-500); }
+.title-teal { border-color: var(--color-teal-700); }
+.title-topology { border-color: var(--color-teal-500); }
+.title-warning { border-color: var(--color-warning-500); }
+.title-success { border-color: var(--color-success-500); }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
+.badge-primary { background: var(--color-primary-50); color: var(--color-primary-700); }
+.badge-success { background: var(--color-success-50); color: var(--color-success-500); }
+.badge-warning { background: var(--color-warning-50); color: var(--color-warning-500); }
+.badge-danger { background: var(--color-danger-50); color: var(--color-danger-500); }
+.badge-neutral { background: var(--color-gray-100); color: var(--color-gray-600); }
+.metric-card { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 116px; }
+.metric-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--color-primary-500); }
+.metric-card.primary { background: var(--color-primary-50); }
+.metric-card.teal { background: var(--color-teal-50); }
+.metric-card.success { background: var(--color-success-50); }
+.metric-card.warning { background: var(--color-warning-50); }
+.metric-card.danger { background: var(--color-danger-50); }
+.metric-card.ink { background: var(--color-bg-card); }
+.metric-card.teal::before { background: var(--color-teal-700); }
+.metric-card.success::before { background: var(--color-success-500); }
+.metric-card.warning::before { background: var(--color-warning-500); }
+.metric-card.danger::before { background: var(--color-danger-500); }
+.metric-card.ink::before { background: var(--color-gray-900); }
+.metric-value { font-size: var(--font-size-kpi); font-weight: 600; line-height: 1.08; color: var(--color-primary-500); }
+.metric-value.teal { color: var(--color-teal-700); }
+.metric-value.dark { color: var(--color-gray-900); }
+.metric-value.good { color: var(--color-success-500); }
+.metric-value.warn { color: var(--color-warning-500); }
+.metric-value.bad { color: var(--color-danger-500); }
+.metric-value.neutral { color: var(--color-gray-600); }
+.metric-label { font-size: var(--font-size-xs); color: var(--color-gray-400); }
+.metric-delta { font-size: var(--font-size-xs); color: var(--color-gray-600); }
+.btn-primary { background: var(--color-primary-500); color: var(--color-bg-card); border: none; border-radius: var(--radius-sm); padding: 8px 18px; font-size: var(--font-size-base); cursor: pointer; transition: background var(--transition-fast); }
+.btn-primary:hover { background: var(--color-primary-700); }
+.btn-ghost { background: transparent; border: 0.5px solid var(--color-gray-200); color: var(--color-gray-600); border-radius: var(--radius-sm); padding: 8px 16px; cursor: pointer; }
+.btn-danger { background: var(--color-danger-50); color: var(--color-danger-500); border: 0.5px solid var(--color-danger-500); border-radius: var(--radius-sm); padding: 8px 16px; cursor: pointer; }
+.btn-sm { padding: 5px 10px; font-size: var(--font-size-sm); }
+.track { height: 8px; border-radius: 999px; background: var(--color-gray-100); }
+.bar { height: 100%; border-radius: inherit; background: var(--color-primary-500); }
+.bar.teal { background: var(--color-teal-500); }
+.bar.warning { background: var(--color-warning-500); }
+.list { display: grid; gap: var(--space-sm); }
+.list-item {
+  border: 0.5px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  background: var(--color-bg-card-alt);
+}
+.info-panel { border: 0.5px solid var(--color-gray-200); border-radius: var(--radius-md); padding: var(--space-md); background: var(--color-bg-card-alt); }
+.info-panel h3 { font-size: var(--font-size-base); margin-bottom: var(--space-sm); }
+.kv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+.kv { border: 0.5px solid var(--color-gray-200); border-radius: var(--radius-sm); padding: var(--space-sm); background: var(--color-bg-card); }
+.kv span { display: block; color: var(--color-gray-400); font-size: var(--font-size-xs); margin-bottom: 4px; }
+.kv b { color: var(--color-gray-900); overflow-wrap: anywhere; }
+.explain { color: var(--color-gray-600); line-height: 1.7; font-size: var(--font-size-sm); }
+.pill-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.mini-table { display: grid; gap: var(--space-xs); }
+.mini-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); align-items: center; padding: 7px 0; border-bottom: 0.5px solid var(--color-gray-200); }
+.mini-row:last-child { border-bottom: 0; }
+.item-row { display: flex; justify-content: space-between; align-items: start; gap: var(--space-sm); }
+.muted { color: var(--color-gray-600); font-size: var(--font-size-sm); line-height: 1.6; }
+.mono { font-family: var(--font-mono); }
+.details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+.field { padding: var(--space-sm); border-radius: var(--radius-md); background: var(--color-bg-card-alt); border: 0.5px solid var(--color-gray-200); }
+.field label { display: block; margin-bottom: 5px; color: var(--color-gray-400); font-size: var(--font-size-xs); }
+.field b { color: var(--color-gray-900); overflow-wrap: anywhere; }
+.field.emph { background: var(--color-primary-50); border-color: var(--color-primary-100); }
+.field.good { background: var(--color-success-50); border-color: var(--color-success-500); }
+.field.warn { background: var(--color-warning-50); border-color: var(--color-warning-500); }
+.radar-svg { width: 100%; min-height: 330px; display: block; }
+.radar-area { fill: color-mix(in srgb, var(--color-primary-500) 16%, transparent); stroke: var(--color-primary-500); }
+@media (max-width: 760px) {
+  .details-grid { grid-template-columns: 1fr; }
+}

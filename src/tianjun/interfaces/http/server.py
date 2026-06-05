@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -17,6 +19,8 @@ DEFAULT_CORS_ALLOW_ORIGIN = "http://127.0.0.1:5173"
 
 def cors_allow_origin() -> str:
     return os.environ.get("TIANJUN_CORS_ALLOW_ORIGIN", DEFAULT_CORS_ALLOW_ORIGIN)
+
+STATIC_DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "dashboard" / "static"
 
 
 def build_http_server(
@@ -41,6 +45,8 @@ def build_http_server(
             try:
                 if path == "/":
                     self._write_json(200, {"name": "Tianjun Engine API", "status": "ok"})
+                    return
+                if self._write_dashboard_static(path):
                     return
                 if path == "/report":
                     self._write_json(200, control_plane.build_report())
@@ -246,6 +252,18 @@ def build_http_server(
                         return
                     self._write_json(200, control_plane.commit_policy(str(payload["policy_id"])))
                     return
+                if path == "/policy-weights":
+                    if not bool(payload.get("confirmed_by_user_button") or payload.get("confirmed")):
+                        self._write_json(403, {"error": "policy weight update requires explicit confirmation"})
+                        return
+                    self._write_json(
+                        200,
+                        control_plane.update_policy_weights(
+                            dict(payload.get("weights") or {}),
+                            reason=str(payload.get("reason") or "用户手动提交多维策略权重。"),
+                        ),
+                    )
+                    return
                 if path == "/feedback/parse":
                     self._write_json(200, control_plane.parse_feedback(payload))
                     return
@@ -276,6 +294,15 @@ def build_http_server(
                             progress=payload.get("progress"),
                             message=payload.get("message"),
                             metrics=payload.get("metrics"),
+                        ),
+                    )
+                    return
+                if path == "/task-runs/cancel":
+                    self._write_json(
+                        200,
+                        control_plane.cancel_task_run(
+                            task_id=str(payload["task_id"]),
+                            requeue=bool(payload.get("requeue", False)),
                         ),
                     )
                     return
@@ -314,6 +341,24 @@ def build_http_server(
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _write_dashboard_static(self, path: str) -> bool:
+            if not (path.startswith("/css/") or path.startswith("/js/")):
+                return False
+            target = (STATIC_DASHBOARD_DIR / path.lstrip("/")).resolve()
+            if not target.is_file() or STATIC_DASHBOARD_DIR not in target.parents:
+                self._write_json(404, {"error": "not_found"})
+                return True
+            body = target.read_bytes()
+            content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+            if target.suffix == ".js":
+                content_type = "text/javascript"
+            self.send_response(200)
+            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
 
         def _send_cors_headers(self) -> None:
             self.send_header("Access-Control-Allow-Origin", cors_allow_origin())

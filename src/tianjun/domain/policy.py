@@ -11,12 +11,16 @@ class PolicyAdjustment:
     tick: int
     weights: dict[str, float]
     reasons: list[str]
+    affected_records: int = 0
+    metrics: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "tick": self.tick,
             "weights": {key: round(value, 4) for key, value in self.weights.items()},
             "reasons": list(self.reasons),
+            "affected_records": self.affected_records,
+            "metrics": {key: round(value, 4) for key, value in self.metrics.items()},
         }
 
 
@@ -45,8 +49,22 @@ class PolicyState:
         complete_weights.update(self.weights)
         return normalize_weights(complete_weights)
 
-    def update(self, tick: int, new_weights: dict[str, float], reasons: list[str]) -> None:
+    def update(
+        self,
+        tick: int,
+        new_weights: dict[str, float],
+        reasons: list[str],
+        *,
+        affected_records: int = 0,
+        metrics: dict[str, float] | None = None,
+    ) -> None:
         self.weights = normalize_weights(new_weights)
         self.adjustment_history.append(
-            PolicyAdjustment(tick=tick, weights=self.current_weights(), reasons=list(reasons))
+            PolicyAdjustment(
+                tick=tick,
+                weights=self.current_weights(),
+                reasons=list(reasons),
+                affected_records=affected_records,
+                metrics=dict(metrics or {}),
+            )
         )

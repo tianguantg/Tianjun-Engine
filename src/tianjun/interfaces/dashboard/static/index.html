@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>天钧引擎 - 算力网络调度驾驶舱</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/nav.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages/overview.css">
+  <link rel="stylesheet" href="css/pages/scheduling.css">
+  <link rel="stylesheet" href="css/pages/topology.css">
+  <link rel="stylesheet" href="css/pages/tasks.css">
+  <link rel="stylesheet" href="css/pages/model.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="topnav-brand">天钧引擎</span>
+    <div class="topnav-tabs" role="tablist">
+      <button class="tab-btn active" data-page="overview" role="tab"><span aria-hidden="true">⌁</span>总览</button>
+      <button class="tab-btn" data-page="scheduling" role="tab"><span aria-hidden="true">◇</span>调度决策</button>
+      <button class="tab-btn" data-page="topology" role="tab"><span aria-hidden="true">◎</span>网络拓扑</button>
+      <button class="tab-btn" data-page="tasks" role="tab"><span aria-hidden="true">▣</span>任务执行</button>
+      <button class="tab-btn" data-page="model" role="tab"><span aria-hidden="true">△</span>模型配置</button>
+    </div>
+    <div class="topnav-status">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="systemStatus" class="badge badge-neutral">系统检查中</span>
+      <span id="modelStatus" class="badge badge-neutral">模型检查中</span>
+      <span id="hermesLlmStatus" class="badge badge-neutral">Hermes 检查中</span>
+      <span id="autoRefreshStatus" class="badge badge-primary">自动刷新中</span>
+      <span id="lastSync" class="topnav-clock">--:--:--</span>
+      <button class="btn-ghost btn-sm" id="refreshButton">刷新</button>
+    </div>
+  </nav>
+  <div id="alertBanner" class="alert-banner" hidden></div>
+  <main id="app">
+    <div class="page" id="page-overview"></div>
+    <div class="page" id="page-scheduling" hidden></div>
+    <div class="page" id="page-topology" hidden></div>
+    <div class="page" id="page-tasks" hidden></div>
+    <div class="page" id="page-model" hidden></div>
+  </main>
+  <script type="module" src="js/api.js"></script>
+  <script type="module" src="js/state.js"></script>
+  <script type="module" src="js/utils.js"></script>
+  <script type="module" src="js/topology.js"></script>
+  <script type="module" src="js/chat.js"></script>
+  <script type="module" src="js/pages/overview.js"></script>
+  <script type="module" src="js/pages/scheduling.js"></script>
+  <script type="module" src="js/pages/topology.js"></script>
+  <script type="module" src="js/pages/tasks.js"></script>
+  <script type="module" src="js/pages/model.js"></script>
+  <script type="module" src="js/router.js"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ from statistics import mean
 from typing import Any
 
 from ..core import ComputeNetworkPolicy, UserFeedback, UserRequirement
-from ..domain import ExecutionRecord, NetworkPathProfile, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp
+from ..domain import ExecutionRecord, NetworkPathProfile, Node, PhysicalTopology, PolicyAdjustment, PolicyState, RunningTask, SchedulingDecision, Task, TaskStatus, clamp, normalize_weights
 from ..policy.optimizer import PolicyOptimizer
 from ..policy.clarifier import ConversationTurn, RequirementSession, clarification_questions, session_status
 from ..policy.feedback import parse_feedback_instruction
@@ -120,6 +120,8 @@ class CentralControlPlane:
             if task.task_id in self.tasks:
                 raise ValueError(f"Task {task.task_id} already exists.")
             task.submit_tick = self.current_tick()
+            if task.deadline is not None and task.deadline <= task.submit_tick:
+                task.deadline = task.submit_tick + task.deadline
             self.tasks[task.task_id] = task
             self.pending_queue.append(task.task_id)
             self._persist_task(task)
@@ -359,6 +361,28 @@ class CentralControlPlane:
                 "submitted_task": submitted,
             }
 
+    def update_policy_weights(self, weights: dict[str, Any], *, reason: str = "用户手动提交多维策略权重。") -> dict[str, Any]:
+        with self.lock:
+            normalized = normalize_weights({str(key): float(value) for key, value in dict(weights or {}).items()})
+            if not normalized:
+                raise ValueError("weights are required")
+            self.policy_state.update(
+                tick=self.current_tick(),
+                new_weights=normalized,
+                reasons=[reason],
+                affected_records=0,
+                metrics={},
+            )
+            if self.state_store is not None:
+                latest_adjustment = self.policy_state.adjustment_history[-1]
+                self.state_store.append_policy_adjustment(latest_adjustment.to_dict())
+                self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
+            return {
+                "status": "updated",
+                "policy_weights": {key: round(value, 4) for key, value in self.policy_state.current_weights().items()},
+                "adjustment": self.policy_state.adjustment_history[-1].to_dict(),
+            }
+
     def parse_feedback(self, feedback_payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             policy_id = str(feedback_payload.get("policy_id", ""))
@@ -592,6 +616,8 @@ class CentralControlPlane:
             actual_duration = max(1, int(ceil(duration_seconds)))
             actual_cost = cost if cost is not None else (actual_duration * node.cost_per_tick)
             within_budget = None if task.budget is None else actual_cost <= task.budget
+            deadline_tick = task.effective_deadline_tick()
+            sla_met = deadline_tick is None or tick <= deadline_tick
             record = ExecutionRecord(
                 task_id=task.task_id,
                 task_type=task.task_type,
@@ -602,7 +628,7 @@ class CentralControlPlane:
                 actual_duration=actual_duration,
                 success=success,
                 cost=actual_cost,
-                sla_met=(task.deadline is None or tick <= task.deadline),
+                sla_met=sla_met,
                 within_budget=within_budget,
                 retry_count=max(0, task.attempts - 1),
                 failure_reason=failure_reason or (None if success else f"returncode_{returncode or -1}"),
@@ -614,6 +640,13 @@ class CentralControlPlane:
                     lease.decision.network_snapshot.get("guaranteed_bandwidth_mbps", 0.0)
                 ),
                 delivery_probability=float(lease.decision.network_snapshot.get("delivery_probability", 1.0)),
+                sla_reason=self._sla_reason(
+                    task=task,
+                    tick=tick,
+                    cost=actual_cost,
+                    sla_met=sla_met,
+                    within_budget=within_budget,
+                ),
                 metadata=dict(metadata or {}),
             )
             self.execution_history.append(record)
@@ -652,9 +685,67 @@ class CentralControlPlane:
                     self.state_store.set_control_value("policy_weights", self.policy_state.current_weights())
             return record.to_dict()
 
+    def cancel_task_run(self, *, task_id: str, requeue: bool = False) -> dict[str, Any]:
+        with self.lock:
+            self._expire_stale_nodes()
+            lease = self.leases.pop(task_id, None)
+            released_nodes: list[str] = []
+            if lease is not None:
+                released_nodes.append(lease.node_id)
+            for node in self.nodes.values():
+                if task_id not in node.running_tasks:
+                    continue
+                node.running_tasks.pop(task_id, None)
+                if node.node_id not in released_nodes:
+                    released_nodes.append(node.node_id)
+                self._persist_node(node)
+            self.task_progress.pop(task_id, None)
+            if self.state_store is not None:
+                self.state_store.delete_lease(task_id)
+
+            task = self.tasks.get(task_id)
+            if task is None and lease is None and not released_nodes:
+                raise ValueError(f"Task {task_id} does not have an active lease or resource allocation.")
+            if task is not None and task.status == TaskStatus.RUNNING:
+                task.status = TaskStatus.PENDING if requeue else TaskStatus.FAILED
+                if requeue and task_id not in self.pending_queue:
+                    self.pending_queue.append(task_id)
+                self._persist_task(task)
+
+            return {
+                "status": "requeued" if requeue else "cancelled",
+                "task_id": task_id,
+                "node_id": released_nodes[0] if released_nodes else "",
+                "released_nodes": released_nodes,
+                "released": True,
+            }
+
     def has_work(self) -> bool:
         with self.lock:
             return bool(self.pending_queue or self.leases)
+
+    @staticmethod
+    def _sla_reason(
+        *,
+        task: Task,
+        tick: int,
+        cost: float,
+        sla_met: bool,
+        within_budget: bool | None,
+    ) -> str:
+        reasons: list[str] = []
+        deadline_tick = task.effective_deadline_tick()
+        if deadline_tick is not None and tick > deadline_tick:
+            elapsed = max(0, tick - task.submit_tick)
+            allowed = max(0, deadline_tick - task.submit_tick)
+            reasons.append(f"提交后耗时 {elapsed} ticks 超过时限 {allowed} ticks")
+        if within_budget is False and task.budget is not None:
+            reasons.append(f"成本 {round(cost, 4)} 超过预算 {round(task.budget, 4)}")
+        if reasons:
+            return "；".join(reasons)
+        if sla_met:
+            return "SLA 达标"
+        return "未满足 SLA 目标"
 
     def build_report(self) -> dict[str, Any]:
         with self.lock:
@@ -705,9 +796,16 @@ class CentralControlPlane:
                     "completed_attempts": len(self.execution_history),
                     "succeeded_attempts": len(succeeded),
                     "failed_attempts": len(failed),
+                    "completed": len(self.execution_history),
+                    "succeeded": len(succeeded),
+                    "failed": len(failed),
                     "pending_tasks": len(self.pending_queue),
                     "leased_tasks": len(self.leases),
                     "running_tasks": len(self.leases),
+                    "pending": len(self.pending_queue),
+                    "running": len(self.leases),
+                    "sla_met": sum(1 for record in self.execution_history if record.sla_met),
+                    "sla_missed": sum(1 for record in self.execution_history if not record.sla_met),
                 },
                 "metrics": {
                     "success_rate": round((len(succeeded) / len(self.execution_history)) if self.execution_history else 0.0, 4),
@@ -739,6 +837,7 @@ class CentralControlPlane:
                 "active_runs": self._active_runs_payload(),
                 "recent_progress_events": list(self.progress_events[-16:]),
                 "recent_records": [record.to_dict() for record in self.execution_history[-8:]],
+                "execution_records": [record.to_dict() for record in self.execution_history],
                 "task_statuses": {
                     task_id: task.status.value for task_id, task in sorted(self.tasks.items(), key=lambda item: item[0])
                 },
@@ -1058,6 +1157,8 @@ class CentralControlPlane:
                 tick=int(payload["tick"]),
                 weights={str(key): float(value) for key, value in payload["weights"].items()},
                 reasons=list(payload["reasons"]),
+                affected_records=int(payload.get("affected_records", 0)),
+                metrics={str(key): float(value) for key, value in dict(payload.get("metrics") or {}).items()},
             )
             for payload in snapshot["policy_adjustments"]
         ]

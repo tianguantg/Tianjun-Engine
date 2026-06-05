@@ -1,0 +1,310 @@
+.scheduling-engine {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.decision-queue,
+.node-compare,
+.compare-grid,
+.candidate-bars {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.decision-queue-item {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card-alt);
+  cursor: pointer;
+}
+
+.decision-queue-item.active {
+  border-color: var(--color-teal-500);
+  background: var(--color-teal-50);
+}
+
+.queue-item-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.resource-forecast {
+  position: relative;
+  color: var(--color-primary-700);
+  font-weight: 600;
+}
+
+.resource-forecast i {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  bottom: calc(100% + var(--space-sm));
+  width: max-content;
+  max-width: 24rem;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 0.0625rem solid var(--color-gray-200);
+  background: var(--color-bg-card);
+  color: var(--color-gray-700);
+  box-shadow: 0 1rem 2rem color-mix(in srgb, var(--color-gray-900) 12%, transparent);
+  font-style: normal;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(var(--space-xs));
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.resource-forecast:hover i,
+.resource-forecast:focus i {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.compare-current {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-50);
+}
+
+.compare-current span,
+.compare-current em {
+  color: var(--color-gray-600);
+  font-style: normal;
+}
+
+.node-candidate {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 0.0625rem solid var(--color-gray-200);
+  background: var(--color-bg-card-alt);
+}
+
+.node-candidate.recommended {
+  border-color: var(--color-success-500);
+  background: var(--color-success-50);
+}
+
+.candidate-bar {
+  display: grid;
+  grid-template-columns: minmax(0, .2fr) minmax(0, 1fr) minmax(0, .22fr);
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.hermes-fab {
+  position: fixed;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  z-index: 18;
+  border: 0;
+  border-radius: 999rem;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-primary-500);
+  color: var(--color-bg-card);
+  font-weight: 600;
+  box-shadow: 0 1rem 2rem color-mix(in srgb, var(--color-primary-900) 18%, transparent);
+}
+
+.hermes-drawer {
+  position: fixed;
+  z-index: 19;
+  right: clamp(1rem, 3vw, 4rem);
+  bottom: clamp(1.5rem, 3.5vh, 3rem);
+  width: min(76rem, calc(100vw - 3rem));
+  max-height: min(80vh, 56rem);
+  overflow: visible;
+}
+
+.hermes-drawer .agent-workbench {
+  max-height: min(80vh, 56rem);
+  display: grid;
+  grid-template-rows: auto minmax(18rem, 1fr) auto auto auto auto auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(1.25rem, 1.8vw, 1.75rem);
+  padding-bottom: clamp(1.75rem, 2vw, 2.25rem);
+}
+
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.agent-workbench,
+.chat-log,
+.composer,
+.hermes-runtime,
+.tool-steps {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.chat-log {
+  min-height: clamp(18rem, 34vh, 24rem);
+  max-height: min(40vh, 34rem);
+  overflow: auto;
+  padding-right: var(--space-xs);
+}
+
+.message {
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg-card-alt);
+  line-height: 1.65;
+}
+
+.message b {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--color-primary-700);
+}
+
+.message.user {
+  justify-self: end;
+  width: min(74%, 52rem);
+  max-width: 58rem;
+  background: var(--color-primary-50);
+}
+
+.composer {
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  background: var(--color-bg-card-alt);
+}
+
+.composer textarea {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-gray-900);
+  line-height: 1.7;
+  min-height: 5.25rem;
+}
+
+.parse-panel .kv-grid,
+.context-grid,
+.hermes-runtime,
+.hidden-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.hermes-drawer .parse-panel .kv-grid,
+.hermes-drawer .context-grid,
+.hermes-drawer .hermes-runtime,
+.hermes-drawer .hidden-summary {
+  grid-template-columns: repeat(4, minmax(9rem, 1fr));
+}
+
+.tool-trace-panel,
+.composer,
+.parse-panel,
+.hermes-runtime,
+.context-grid,
+.hidden-summary {
+  flex-shrink: 0;
+}
+
+.tool-trace-panel {
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.composer-actions,
+.tool-trace-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.context-grid,
+.decision-steps {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hidden-summary {
+  display: none;
+}
+
+.tool-step {
+  padding: var(--space-sm);
+  border: 0.0625rem solid var(--color-gray-200);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card-alt);
+}
+
+.tool-step.running {
+  border-color: var(--color-primary-300);
+  background: var(--color-primary-50);
+}
+
+.tool-step.done {
+  border-color: var(--color-teal-100);
+  background: var(--color-teal-50);
+}
+
+@media (max-width: 1280px) {
+  .scheduling-engine {
+    grid-template-columns: 1fr;
+  }
+
+  .hermes-drawer {
+    width: min(64rem, calc(100vw - 2rem));
+  }
+
+  .hermes-drawer .parse-panel .kv-grid,
+  .hermes-drawer .context-grid,
+  .hermes-drawer .hermes-runtime,
+  .hermes-drawer .hidden-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .node-compare-panel {
+    display: none;
+  }
+
+  .hermes-drawer {
+    inset: 5rem 1rem 1.25rem;
+    width: auto;
+    max-height: none;
+  }
+
+  .hermes-drawer .agent-workbench {
+    max-height: 100%;
+    grid-template-rows: auto minmax(18rem, 1fr) auto auto auto auto auto;
+  }
+
+  .chat-log {
+    min-height: 18rem;
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .hermes-drawer .parse-panel .kv-grid,
+  .hermes-drawer .context-grid,
+  .hermes-drawer .hermes-runtime,
+  .hermes-drawer .hidden-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .message.user {
+    width: 100%;
+  }
+}

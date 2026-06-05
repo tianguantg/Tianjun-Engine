@@ -85,5 +85,16 @@ class PolicyOptimizer:
                 (1.0 - policy_state.learning_rate) * current_value
                 + (policy_state.learning_rate * target[key])
             )
-        policy_state.update(tick=tick, new_weights=smoothed, reasons=reasons)
+        policy_state.update(
+            tick=tick,
+            new_weights=smoothed,
+            reasons=reasons,
+            affected_records=len(records),
+            metrics={
+                "sla_rate": sla_rate,
+                "failure_rate": failure_rate,
+                "budget_violation_rate": budget_violation_rate,
+                "load_imbalance": imbalance,
+            },
+        )
         return reasons

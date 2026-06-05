@@ -46,11 +46,19 @@ class Task:
     last_scheduled_node: str | None = None
     target_node_id: str | None = None
 
+    def effective_deadline_tick(self) -> int | None:
+        if self.deadline is None:
+            return None
+        if self.submit_tick > 0 and self.deadline <= self.submit_tick:
+            return self.submit_tick + self.deadline
+        return self.deadline
+
     def urgency_score(self, current_tick: int) -> float:
         base = clamp(self.priority / 10.0)
-        if self.deadline is None:
+        deadline_tick = self.effective_deadline_tick()
+        if deadline_tick is None:
             return base
-        slack = self.deadline - current_tick - self.estimated_duration
+        slack = deadline_tick - current_tick - self.estimated_duration
         if slack <= 0:
             return 1.0
         return clamp(max(base, 1.0 - (slack / max(2.0, self.estimated_duration * 4.0))))

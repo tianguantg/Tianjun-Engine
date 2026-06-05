@@ -75,6 +75,7 @@ class ExecutionRecord:
     network_risk: float = 0.0
     effective_bandwidth_mbps: float = 0.0
     delivery_probability: float = 1.0
+    sla_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -98,5 +99,6 @@ class ExecutionRecord:
             "network_risk": round(self.network_risk, 4),
             "effective_bandwidth_mbps": round(self.effective_bandwidth_mbps, 4),
             "delivery_probability": round(self.delivery_probability, 4),
+            "sla_reason": self.sla_reason,
             "metadata": dict(self.metadata),
         }

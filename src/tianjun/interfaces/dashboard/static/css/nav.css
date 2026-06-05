@@ -1,0 +1,68 @@
+.topnav {
+  position: fixed;
+  z-index: 20;
+  inset: 0 0 auto;
+  height: 52px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  padding: 0 var(--space-lg);
+  background: var(--color-bg-card);
+  border-bottom: 0.5px solid var(--color-gray-200);
+}
+.topnav-brand {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-primary-900);
+  white-space: nowrap;
+}
+.topnav-tabs, .topnav-status { display: flex; gap: var(--space-sm); align-items: center; }
+.topnav-tabs { min-width: 0; overflow-x: auto; }
+.tab-btn {
+  height: 52px;
+  border: 0;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--color-gray-600);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.tab-btn span { margin-right: 6px; color: var(--color-primary-500); font-weight: 700; }
+.tab-btn.active {
+  background: var(--color-primary-50);
+  color: var(--color-primary-700);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--color-primary-500);
+}
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--color-warning-500);
+  box-shadow: 0 0 0 4px var(--color-warning-50);
+}
+.status-dot.ok { background: var(--color-success-500); box-shadow: 0 0 0 4px var(--color-success-50); }
+.status-dot.error { background: var(--color-danger-500); box-shadow: 0 0 0 4px var(--color-danger-50); }
+.topnav-clock { color: var(--color-gray-400); font: 500 var(--font-size-xs) var(--font-mono); }
+.alert-banner {
+  position: fixed;
+  z-index: 19;
+  top: 52px;
+  left: 0;
+  right: 0;
+  min-height: 36px;
+  padding: 9px var(--space-lg) 9px calc(var(--space-lg) + 4px);
+  background: var(--color-danger-50);
+  border-left: 4px solid var(--color-danger-500);
+  color: var(--color-danger-500);
+  font-size: var(--font-size-sm);
+}
+@media (max-width: 1180px) {
+  .topnav { height: auto; min-height: 52px; grid-template-columns: 1fr; padding: var(--space-sm) var(--space-md); }
+  .tab-btn { height: 34px; border-radius: var(--radius-sm); }
+  .topnav-status { flex-wrap: wrap; }
+  .alert-banner { top: 112px; }
+}

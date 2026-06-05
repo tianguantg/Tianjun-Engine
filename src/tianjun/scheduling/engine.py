@@ -152,16 +152,18 @@ class ClosedLoopAdaptiveScheduler:
 
     def _performance_raw(self, task: Task, predicted_duration: int, predicted_finish_tick: int) -> float:
         delay_penalty = 1.0
-        if task.deadline is not None and predicted_finish_tick > task.deadline:
-            lateness = predicted_finish_tick - task.deadline
+        deadline_tick = task.effective_deadline_tick()
+        if deadline_tick is not None and predicted_finish_tick > deadline_tick:
+            lateness = predicted_finish_tick - deadline_tick
             delay_penalty += lateness * 2.5
         return 1.0 / max(1.0, predicted_duration * delay_penalty)
 
     def _completion_raw(self, task: Task, current_tick: int, predicted_finish_tick: int) -> float:
         completion_time = max(1.0, float(predicted_finish_tick - current_tick))
         deadline_penalty = 1.0
-        if task.deadline is not None and predicted_finish_tick > task.deadline:
-            lateness_ratio = (predicted_finish_tick - task.deadline) / max(1.0, float(task.estimated_duration))
+        deadline_tick = task.effective_deadline_tick()
+        if deadline_tick is not None and predicted_finish_tick > deadline_tick:
+            lateness_ratio = (predicted_finish_tick - deadline_tick) / max(1.0, float(task.estimated_duration))
             deadline_penalty += lateness_ratio * 3.0
         return 1.0 / max(1.0, completion_time * deadline_penalty)
 
