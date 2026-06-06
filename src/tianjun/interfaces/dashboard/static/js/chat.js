@@ -55,6 +55,8 @@ function toolStageForName(name) {
     continue_requirement_dialogue: "需求理解",
     get_cluster_state: "库存核验",
     draft_compute_network_policy: "融合评分",
+    compare_policy_options: "多方案对比",
+    explain_policy: "锁定方案",
     optimize_policy_from_feedback: "融合评分",
     simulate_policy: "生成候选节点",
     commit_policy: "输出推荐节点",
@@ -72,7 +74,8 @@ export function stepIdFromEvent(event) {
   if (event.type?.startsWith("llm")) return "understand";
   if (tool === "get_cluster_state") return "inventory";
   if (tool.includes("requirement")) return "understand";
-  if (tool === "draft_compute_network_policy" || tool === "optimize_policy_from_feedback") return "fusion";
+  if (tool === "draft_compute_network_policy" || tool === "compare_policy_options" || tool === "optimize_policy_from_feedback") return "fusion";
+  if (tool === "explain_policy") return "candidate";
   if (tool === "simulate_policy") return "candidate";
   if (event.type === "assistant_delta") return "reply";
   return null;
@@ -209,6 +212,10 @@ function handleEvent(eventText, content, append) {
     const artifacts = payload.artifacts || {};
     if (artifacts.policy) updateWorkspaceFromPolicy(artifacts.policy, artifacts.simulation);
     if (artifacts.optimization?.policy) updateWorkspaceFromPolicy(artifacts.optimization.policy, artifacts.simulation);
+    if (artifacts.policy_options) {
+      state.hermesPolicyId = null;
+      updateSubmitButton();
+    }
   } else if (payload.type === "done") {
     const result = payload.result || {};
     state.hermesSessionId = result.session?.session_id || state.hermesSessionId;

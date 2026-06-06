@@ -300,6 +300,26 @@ class CentralControlPlane:
             }
             return result
 
+    def compare_policy_options_from_session(
+        self,
+        session_id: str,
+        *,
+        execution_payload: dict[str, Any] | None = None,
+        option_profiles: list[str] | None = None,
+    ) -> dict[str, Any]:
+        with self.lock:
+            session = self._session_or_raise(session_id)
+            return self.compare_policy_options(
+                session.requirement.to_dict(),
+                execution_payload=execution_payload,
+                option_profiles=option_profiles,
+                requirement_session={
+                    "session_id": session.session_id,
+                    "status": session.status,
+                    "questions": list(session.questions),
+                },
+            )
+
     def draft_policy(
         self,
         requirement_payload: dict[str, Any],
@@ -320,6 +340,173 @@ class CentralControlPlane:
             self.policies[policy.policy_id] = policy
             self.policy_tasks[policy.policy_id] = task
             return policy.to_dict()
+
+    def compare_policy_options(
+        self,
+        requirement_payload: dict[str, Any],
+        *,
+        execution_payload: dict[str, Any] | None = None,
+        option_profiles: list[str] | None = None,
+        requirement_session: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self.lock:
+            self._expire_stale_nodes()
+            base_requirement = UserRequirement.from_dict(requirement_payload)
+            execution = None if execution_payload is None else execution_from_dict(execution_payload)
+            profiles = self._normalize_option_profiles(option_profiles)
+            options: list[dict[str, Any]] = []
+            for index, profile in enumerate(profiles):
+                requirement = self._requirement_for_option_profile(base_requirement, profile)
+                policy, task = self.policy_generator.draft_policy(
+                    requirement,
+                    scheduler=self.scheduler,
+                    nodes=self.nodes.values(),
+                    current_tick=self.current_tick(),
+                    policy_id=f"{self.policy_generator._new_policy_id()}_{profile}",
+                    execution=execution,
+                )
+                self.policies[policy.policy_id] = policy
+                self.policy_tasks[policy.policy_id] = task
+                policy_payload = policy.to_dict()
+                simulation = simulate_policy(policy).to_dict()
+                options.append(
+                    self._policy_option_payload(
+                        label=chr(ord("A") + index),
+                        profile=profile,
+                        policy=policy_payload,
+                        simulation=simulation,
+                    )
+                )
+            recommended = self._recommended_policy_option(options)
+            return {
+                "status": "compared",
+                "requirement": base_requirement.to_dict(),
+                "requirement_session": requirement_session,
+                "option_profiles": profiles,
+                "options": options,
+                "recommended_option": recommended,
+                "recommended_policy_id": None if recommended is None else recommended["policy_id"],
+                "explanation": self._policy_options_explanation(options, recommended),
+            }
+
+    @staticmethod
+    def _normalize_option_profiles(option_profiles: list[str] | None) -> list[str]:
+        aliases = {
+            "latency": "latency_first",
+            "latency_first": "latency_first",
+            "low_latency": "latency_first",
+            "cost": "cost_first",
+            "cost_first": "cost_first",
+            "low_cost": "cost_first",
+            "balanced": "balanced_reliability",
+            "reliability": "balanced_reliability",
+            "reliability_first": "balanced_reliability",
+            "quality": "balanced_reliability",
+            "quality_first": "balanced_reliability",
+            "balanced_reliability": "balanced_reliability",
+        }
+        requested = option_profiles or ["latency_first", "cost_first", "balanced_reliability"]
+        profiles: list[str] = []
+        for item in requested:
+            profile = aliases.get(str(item).strip().lower())
+            if profile and profile not in profiles:
+                profiles.append(profile)
+        return profiles[:4] or ["latency_first", "cost_first", "balanced_reliability"]
+
+    @staticmethod
+    def _requirement_for_option_profile(requirement: UserRequirement, profile: str) -> UserRequirement:
+        data = requirement.to_dict()
+        vector = dict(data.get("priority_vector") or {})
+        if profile == "latency_first":
+            data["priority"] = "latency"
+            vector.update({
+                "latency": max(vector.get("latency", 0.0), 1.0),
+                "network": max(vector.get("network", 0.0), 0.78),
+            })
+        elif profile == "cost_first":
+            data["priority"] = "cost"
+            vector.update({
+                "cost": max(vector.get("cost", 0.0), 1.0),
+                "balance": max(vector.get("balance", 0.0), 0.45),
+            })
+        elif profile == "balanced_reliability":
+            data["priority"] = "quality"
+            vector.update({
+                "quality": max(vector.get("quality", 0.0), 0.9),
+                "network": max(vector.get("network", 0.0), 0.55),
+                "balance": max(vector.get("balance", 0.0), 0.45),
+            })
+        data["priority_vector"] = vector
+        data["objective"] = f"{requirement.objective} | option_profile={profile}"
+        data["missing_fields"] = []
+        data["confidence"] = max(requirement.confidence, 0.72)
+        return UserRequirement.from_dict(data)
+
+    @staticmethod
+    def _policy_option_payload(
+        *,
+        label: str,
+        profile: str,
+        policy: dict[str, Any],
+        simulation: dict[str, Any],
+    ) -> dict[str, Any]:
+        effect = policy.get("expected_effect") or {}
+        latency = effect.get("latency") or {}
+        cost = effect.get("cost") or {}
+        quality = effect.get("service_quality") or {}
+        security = effect.get("security") or {}
+        compute = policy.get("selected_compute") or {}
+        network = policy.get("selected_network") or {}
+        return {
+            "label": label,
+            "profile": profile,
+            "profile_name": {
+                "latency_first": "低时延优先",
+                "cost_first": "低成本优先",
+                "balanced_reliability": "均衡 / 高可靠优先",
+            }.get(profile, profile),
+            "policy_id": policy.get("policy_id"),
+            "status": policy.get("status"),
+            "feasible": bool(simulation.get("feasible") and compute.get("node_id")),
+            "selected_node": compute.get("node_id"),
+            "selected_region": compute.get("region") or network.get("target_region"),
+            "expected_latency_ms": latency.get("expected_ms"),
+            "expected_cost": cost.get("expected_cost"),
+            "budget_margin": cost.get("budget_margin"),
+            "sla_probability": quality.get("sla_probability"),
+            "security_score": security.get("security_score"),
+            "total_score": compute.get("score"),
+            "risks": list(simulation.get("risks") or (policy.get("explanation") or {}).get("risks") or []),
+            "policy": policy,
+            "simulation": simulation,
+        }
+
+    @staticmethod
+    def _recommended_policy_option(options: list[dict[str, Any]]) -> dict[str, Any] | None:
+        feasible = [option for option in options if option.get("feasible")]
+        if not feasible:
+            return options[0] if options else None
+
+        def score(option: dict[str, Any]) -> float:
+            total = float(option.get("total_score") or 0.0)
+            sla = float(option.get("sla_probability") or 0.0)
+            security = float(option.get("security_score") or 0.0)
+            cost = float(option.get("expected_cost") or 0.0)
+            latency = float(option.get("expected_latency_ms") or 0.0)
+            return (total * 0.46) + (sla * 0.24) + (security * 0.12) - (cost * 0.006) - (latency * 0.0015)
+
+        return max(feasible, key=score)
+
+    @staticmethod
+    def _policy_options_explanation(options: list[dict[str, Any]], recommended: dict[str, Any] | None) -> str:
+        if not options:
+            return "没有生成可对比的策略候选。"
+        if recommended is None or not recommended.get("feasible"):
+            return "当前多个策略取向下都缺少可正式下发的候选节点，建议放宽地域、资源、预算、网络或安全约束。"
+        return (
+            f"推荐优先选择方案 {recommended['label']}（{recommended['profile_name']}），"
+            "因为它在可行性、SLA 概率、成本和综合评分之间取得了当前最稳的平衡。"
+        )
 
     def get_policy(self, policy_id: str) -> dict[str, Any]:
         with self.lock:

@@ -243,6 +243,20 @@ def build_http_server(
                     )
                     self._write_json(200, result)
                     return
+                if path == "/policies/compare":
+                    requirement = payload.get("requirement")
+                    if requirement is None:
+                        requirement = control_plane.parse_requirement(
+                            str(payload.get("message", "")),
+                            overrides=payload.get("overrides"),
+                        )
+                    result = control_plane.compare_policy_options(
+                        requirement,
+                        execution_payload=payload.get("execution"),
+                        option_profiles=payload.get("option_profiles"),
+                    )
+                    self._write_json(200, result)
+                    return
                 if path == "/policies/simulate":
                     self._write_json(200, control_plane.simulate_policy(str(payload["policy_id"])))
                     return

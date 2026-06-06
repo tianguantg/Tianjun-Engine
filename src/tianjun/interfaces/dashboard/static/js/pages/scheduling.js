@@ -30,27 +30,38 @@ export function initScheduling() {
           <h2 class="card-title title-teal">Hermes 咨询</h2>
           <button id="hermesClose" class="btn-ghost btn-sm" type="button">收起</button>
         </div>
-        <div id="chatLog" class="chat-log"></div>
-        <section class="info-panel parse-panel"><h3>需求解析</h3><div id="requirementParse" class="kv-grid"></div></section>
-        <div class="composer">
-          <textarea id="intentInput" rows="4" placeholder="输入业务需求、约束或优化反馈。"></textarea>
-          <div class="composer-actions">
-            <button id="askButton" class="btn-primary">发送</button>
-            <button id="stopHermesButton" class="btn-danger" disabled>暂停回复</button>
-            <button id="submitButton" class="btn-danger" disabled>正式下发</button>
-            <button id="endTaskButton" class="btn-ghost">新会话</button>
-          </div>
+        <div class="workbench-body">
+          <section class="conversation-stack">
+            <div id="chatLog" class="chat-log"></div>
+            <div class="conversation-dock">
+              <details class="info-panel parse-panel" id="requirementParsePanel">
+                <summary><span>需求解析</span><b id="requirementParseSummary">等待输入</b></summary>
+                <div id="requirementParse" class="kv-grid"></div>
+              </details>
+              <div class="composer">
+                <textarea id="intentInput" rows="3" placeholder="输入业务需求、约束或优化反馈。"></textarea>
+                <div class="composer-actions">
+                  <button id="askButton" class="btn-primary">发送</button>
+                  <button id="stopHermesButton" class="btn-danger" disabled>暂停回复</button>
+                  <button id="submitButton" class="btn-danger" disabled>正式下发</button>
+                  <button id="endTaskButton" class="btn-ghost">新会话</button>
+                </div>
+              </div>
+            </div>
+          </section>
+          <aside class="assistant-side">
+            <div class="details-grid hermes-runtime">
+              <div class="field"><label>当前模型</label><b id="agentLlmMode">检查中</b></div>
+              <div class="field"><label>当前阶段</label><b id="agentRuntimeMode">等待输入</b></div>
+              <div class="field"><label>工具链状态</label><b id="agentToolMode">检查中</b></div>
+              <div class="field"><label>策略状态</label><b id="intentSummaryStatus">等待需求</b></div>
+            </div>
+            <div id="schedulingContext" class="kv-grid context-grid"></div>
+            <div id="intentSummaryBody" class="details-grid hidden-summary"></div>
+            <p id="workspaceRisk" class="muted">等待策略生成后显示风险、确认要求和下发保护状态。</p>
+            <section class="tool-trace-panel"><div class="tool-trace-head"><b>工具调用 / 决策过程</b><span id="toolTraceStatus">等待输入</span></div><div id="toolTraceSteps" class="tool-steps decision-steps"></div></section>
+          </aside>
         </div>
-        <div class="details-grid hermes-runtime">
-          <div class="field"><label>当前模型</label><b id="agentLlmMode">检查中</b></div>
-          <div class="field"><label>当前阶段</label><b id="agentRuntimeMode">等待输入</b></div>
-          <div class="field"><label>工具链状态</label><b id="agentToolMode">检查中</b></div>
-          <div class="field"><label>策略状态</label><b id="intentSummaryStatus">等待需求</b></div>
-        </div>
-        <div id="schedulingContext" class="kv-grid context-grid"></div>
-        <div id="intentSummaryBody" class="details-grid hidden-summary"></div>
-        <p id="workspaceRisk" class="muted">等待策略生成后显示风险、确认要求和下发保护状态。</p>
-        <section class="tool-trace-panel"><div class="tool-trace-head"><b>工具调用 / 决策过程</b><span id="toolTraceStatus">等待输入</span></div><div id="toolTraceSteps" class="tool-steps decision-steps"></div></section>
       </article>
     </aside>`;
 
@@ -168,12 +179,15 @@ function renderRequirement(report) {
   const payload = state.intentPayload ?? {};
   const task = payload.task ?? payload.submitted_task ?? {};
   const decision = activeDecision(report, state.intentPayload);
+  const onlineCount = (report.nodes ?? []).filter((node) => node.online !== false).length;
   const fields = [
     ["任务类型", task.task_type ?? "等待输入"],
     ["目标区域", decision?.network_snapshot?.physical_topology?.source_location ?? "--"],
     ["时延上限", task.max_latency_ms ? `${task.max_latency_ms} ms` : "未指定"],
-    ["候选节点数量", String((report.nodes ?? []).filter((node) => node.online !== false).length)],
+    ["候选节点数量", String(onlineCount)],
   ];
+  const summary = document.getElementById("requirementParseSummary");
+  if (summary) summary.textContent = `${task.task_type ?? "等待输入"} · ${onlineCount} 个候选节点`;
   const target = document.getElementById("requirementParse");
   if (target) target.innerHTML = fields.map(([k, v]) => `<div class="kv"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join("");
 }

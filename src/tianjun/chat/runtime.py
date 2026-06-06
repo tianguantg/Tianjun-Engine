@@ -102,6 +102,8 @@ class ChatSession:
     requirement_session_id: str | None = None
     policy_id: str | None = None
     pending_confirmation: bool = False
+    pending_option_selection: bool = False
+    policy_options: dict[str, str] = field(default_factory=dict)
     turns: list[ChatTurn] = field(default_factory=list)
     tool_trace: list[dict[str, Any]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
@@ -114,6 +116,8 @@ class ChatSession:
             "requirement_session_id": self.requirement_session_id,
             "policy_id": self.policy_id,
             "pending_confirmation": self.pending_confirmation,
+            "pending_option_selection": self.pending_option_selection,
+            "policy_options": dict(self.policy_options),
             "turns": [turn.to_dict(include_tool_payload=include_tool_payload) for turn in self.turns],
             "tool_trace": list(self.tool_trace),
             "created_at": round(self.created_at, 4),
@@ -212,6 +216,8 @@ class ChatRuntime:
         )
         session.policy_id = target_policy_id
         session.pending_confirmation = False
+        session.pending_option_selection = False
+        session.policy_options = {}
         session.status = "committed"
         response = _commit_response(committed)
         result = self._finish(session, response, action="commit_policy", artifacts={"commit": committed})
@@ -242,6 +248,14 @@ class ChatRuntime:
                 stream_emit=stream_emit,
             )
 
+        if _looks_like_general_chat_question(text) and not session.pending_confirmation and not session.pending_option_selection:
+            response = self._general_chat_response(session=session, message=text, stream_emit=stream_emit)
+            return self._finish(session, response, action="general_chat", artifacts={}, stream_emit=stream_emit)
+
+        if session.requirement_session_id is None and session.policy_id is None and not _looks_like_scheduling_request(text):
+            response = self._general_chat_response(session=session, message=text, stream_emit=stream_emit)
+            return self._finish(session, response, action="general_chat", artifacts={}, stream_emit=stream_emit)
+
         if session.pending_confirmation and _is_cancel(text):
             session.pending_confirmation = False
             session.status = "active"
@@ -258,6 +272,31 @@ class ChatRuntime:
                 response,
                 action="await_user_button_commit",
                 artifacts={"policy_id": session.policy_id, "requires_user_button": True},
+                stream_emit=stream_emit,
+            )
+
+        if session.pending_option_selection:
+            selected_policy_id = _selected_policy_option(text, session.policy_options)
+            if selected_policy_id is not None:
+                policy = self._call_tool(session, "explain_policy", {"policy_id": selected_policy_id}, stream_emit=stream_emit)
+                simulation = self._call_tool(session, "simulate_policy", {"policy_id": selected_policy_id}, stream_emit=stream_emit)
+                session.policy_id = selected_policy_id
+                session.pending_option_selection = False
+                session.pending_confirmation = bool(simulation.get("feasible"))
+                response = _selected_option_response(policy, simulation)
+                return self._finish(
+                    session,
+                    response,
+                    action="select_policy_option",
+                    artifacts={"policy": policy, "simulation": simulation},
+                    stream_emit=stream_emit,
+                )
+            response = _option_selection_help_response(session.policy_options)
+            return self._finish(
+                session,
+                response,
+                action="await_policy_option_selection",
+                artifacts={"policy_options": dict(session.policy_options)},
                 stream_emit=stream_emit,
             )
 
@@ -342,20 +381,31 @@ class ChatRuntime:
 
         drafted = self._call_tool(
             session,
-            "draft_compute_network_policy",
+            "compare_policy_options",
             {"session_id": session.requirement_session_id},
             stream_emit=stream_emit,
         )
-        policy = drafted["policy"] if "policy" in drafted else drafted
-        session.policy_id = policy["policy_id"]
-        simulation = self._call_tool(session, "simulate_policy", {"policy_id": session.policy_id}, stream_emit=stream_emit)
-        session.pending_confirmation = bool(simulation.get("feasible"))
-        response = _policy_response(policy, simulation)
+        session.policy_options = {
+            str(option.get("label", "")).upper(): str(option.get("policy_id"))
+            for option in drafted.get("options", [])
+            if option.get("label") and option.get("policy_id")
+        }
+        for option in drafted.get("options", []):
+            profile = str(option.get("profile") or "")
+            if option.get("policy_id"):
+                session.policy_options[profile] = str(option["policy_id"])
+        recommended = drafted.get("recommended_option") or {}
+        if recommended.get("policy_id"):
+            session.policy_options["recommended"] = str(recommended["policy_id"])
+        session.policy_id = None
+        session.pending_confirmation = False
+        session.pending_option_selection = bool(session.policy_options)
+        response = _policy_options_response(drafted)
         return self._finish(
             session,
             response,
-            action="draft_and_simulate_policy",
-            artifacts={"requirement_session": requirement_session, "policy": policy, "simulation": simulation},
+            action="compare_policy_options",
+            artifacts={"requirement_session": requirement_session, "policy_options": drafted},
             stream_emit=stream_emit,
         )
 
@@ -568,6 +618,49 @@ class ChatRuntime:
             safe["__clear_prior_constraints"] = True
         return safe or None
 
+    def _general_chat_response(
+        self,
+        *,
+        session: ChatSession,
+        message: str,
+        stream_emit: StreamEmit | None,
+    ) -> str:
+        """Answer non-scheduling chat with the configured LLM instead of forcing intent parsing."""
+        if not self.llm_client or not self.llm_client.is_enabled():
+            return (
+                "我当前以本地规则模式运行，主要负责算力调度、节点状态、策略生成和执行反馈。"
+                "如果你想聊一般问题，请先配置并启用 DeepSeek；如果要调度任务，可以直接描述地域、资源、预算或时延目标。"
+            )
+        self._begin_llm_operation("general_chat", stream_emit=stream_emit)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是天钧 Hermes 智能体的对话层。"
+                    "你可以简洁回答一般知识或闲聊问题，但要保持项目助手身份。"
+                    "如果用户问题与算力调度无关，先直接回答，再用一句话提示可继续回到调度任务。"
+                    "不要编造当前集群库存、节点状态、策略结果或执行状态；这些只能来自工具。"
+                    "回复使用中文，结构清晰，避免过长。"
+                ),
+            },
+            *[
+                {"role": turn.role, "content": turn.content}
+                for turn in session.turns[-7:-1]
+                if turn.role in {"user", "assistant"}
+            ],
+            {"role": "user", "content": message},
+        ]
+        try:
+            response = self.llm_client.chat(messages, timeout_seconds=self.llm_client.settings.timeout_seconds)
+        except Exception as exc:  # noqa: BLE001
+            self._finish_llm_operation("general_chat", succeeded=False, stream_emit=stream_emit, detail=str(exc))
+            return (
+                "DeepSeek 通用对话这次没有完成，我先保持调度助手模式。"
+                "你可以继续描述算力任务需求，或稍后检查 LLM 连接后再试。"
+            )
+        self._finish_llm_operation("general_chat", succeeded=True, stream_emit=stream_emit)
+        return response
+
     def _begin_llm_operation(self, operation: str, *, stream_emit: StreamEmit | None) -> None:
         self.llm_activity["requests"] += 1
         self.llm_activity["last_operation"] = operation
@@ -692,6 +785,33 @@ def _looks_like_feedback(text: str) -> bool:
     )
 
 
+def _selected_policy_option(text: str, options: dict[str, str]) -> str | None:
+    if not options:
+        return None
+    compact = re.sub(r"\s+", "", text).lower()
+    if len(compact) == 1 and compact.upper() in options:
+        return options[compact.upper()]
+    label_patterns = {
+        "A": ("方案a", "选a", "选择a", "用a", "第一个", "方案一"),
+        "B": ("方案b", "选b", "选择b", "用b", "第二个", "方案二"),
+        "C": ("方案c", "选c", "选择c", "用c", "第三个", "方案三"),
+        "D": ("方案d", "选d", "选择d", "用d", "第四个", "方案四"),
+    }
+    for label, patterns in label_patterns.items():
+        if label in options and any(pattern in compact for pattern in patterns):
+            return options[label]
+    profile_patterns = {
+        "latency_first": ("低时延", "低延迟", "最快", "时延优先", "延迟优先", "latency"),
+        "cost_first": ("低成本", "便宜", "省钱", "成本优先", "cost"),
+        "balanced_reliability": ("均衡", "可靠", "高可靠", "稳定", "sla", "quality"),
+        "recommended": ("推荐", "默认", "你建议", "最优", "best"),
+    }
+    for key, patterns in profile_patterns.items():
+        if key in options and any(pattern in compact for pattern in patterns):
+            return options[key]
+    return None
+
+
 def _looks_like_cluster_inventory_question(text: str) -> bool:
     lower = text.lower()
     subject_terms = ("节点", "实例", "机器", "资源", "集群", "node", "instance", "cluster")
@@ -719,6 +839,111 @@ def _looks_like_cluster_inventory_question(text: str) -> bool:
         "which node",
     )
     return any(term in lower for term in subject_terms) and any(term in lower for term in question_terms)
+
+
+def _looks_like_general_chat_question(text: str) -> bool:
+    lower = text.lower()
+    knowledge_terms = (
+        "读过",
+        "看过",
+        "听过",
+        "知道",
+        "了解",
+        "是什么",
+        "为什么",
+        "怎么理解",
+        "讲讲",
+        "介绍",
+        "解释",
+        "论文",
+        "书",
+        "小说",
+        "作者",
+        "paper",
+        "article",
+        "book",
+        "novel",
+        "what is",
+        "why",
+        "explain",
+        "tell me",
+    )
+    task_action_terms = (
+        "部署",
+        "调度",
+        "下发",
+        "提交",
+        "运行",
+        "创建",
+        "分配",
+        "推荐节点",
+        "选节点",
+        "生成策略",
+        "仿真",
+        "预算",
+        "时延",
+        "延迟",
+        "cpu",
+        "gpu",
+        "内存",
+        "带宽",
+        "lease",
+        "schedule",
+        "deploy",
+        "commit",
+    )
+    return (
+        any(term in lower or term in text for term in knowledge_terms)
+        and not any(term in lower or term in text for term in task_action_terms)
+    )
+
+
+def _looks_like_scheduling_request(text: str) -> bool:
+    lower = text.lower()
+    scheduling_terms = (
+        "部署",
+        "调度",
+        "任务",
+        "节点",
+        "资源",
+        "算力",
+        "cpu",
+        "gpu",
+        "内存",
+        "时延",
+        "延迟",
+        "预算",
+        "成本",
+        "安全",
+        "带宽",
+        "推理",
+        "训练",
+        "分析",
+        "批处理",
+        "流式",
+        "在线服务",
+        "服务",
+        "lease",
+        "schedule",
+        "deploy",
+        "node",
+        "cluster",
+        "latency",
+        "budget",
+        "inference",
+        "training",
+        "analytics",
+    )
+    resource_patterns = (
+        r"\d+(\.\d+)?\s*(核|core|cores|cpu)",
+        r"\d+(\.\d+)?\s*(gb|g|mb)\s*(内存|memory|ram)?",
+        r"\d+(\.\d+)?\s*(ms|毫秒)",
+    )
+    return (
+        any(term in lower or term in text for term in scheduling_terms)
+        or bool(_mentioned_regions(text))
+        or any(re.search(pattern, lower, re.IGNORECASE) for pattern in resource_patterns)
+    )
 
 
 def _mentioned_regions(text: str) -> list[str]:
@@ -811,17 +1036,23 @@ def _questions_response(requirement_session: dict[str, Any]) -> str:
     questions = requirement_session.get("questions") or []
     requirement = requirement_session.get("requirement") or {}
     recognized: list[str] = []
+    pending: list[str] = []
+    optional: list[str] = []
     workload = requirement.get("workload_type")
     workload_unspecified = bool((requirement.get("deployment") or {}).get("workload_type_unspecified"))
     if workload_unspecified:
         recognized.append("任务类型 `未指定`（将采用通用资源画像估算，可选补充）")
     elif workload and "workload_type" not in (requirement.get("missing_fields") or []):
         recognized.append(f"任务类型 `{_WORKLOAD_LABELS.get(str(workload).lower(), workload)}`")
+    else:
+        pending.append("任务类型：推理 / 训练 / 流式 / 分析 / 批处理")
     regions = requirement.get("region_preference") or []
     if regions:
         recognized.append("部署地域 " + "、".join(f"`{_display_region(region)}`" for region in regions))
     elif (requirement.get("deployment") or {}).get("region_unspecified"):
         recognized.append("部署地域 `不限`（将在当前在线节点池中择优）")
+    else:
+        pending.append("部署地域或数据驻留要求：例如上海、北京、深圳、成都，或回复 `地域不限`")
     resource_parts = []
     for field, label, suffix in (("cpu_cores", "CPU", " 核"), ("memory_gb", "内存", " GB"), ("gpu_count", "GPU", " 张")):
         value = requirement.get(field)
@@ -829,14 +1060,124 @@ def _questions_response(requirement_session: dict[str, Any]) -> str:
             resource_parts.append(f"{label} `{_format_number(value) + suffix}`")
     if resource_parts:
         recognized.append("，".join(resource_parts))
+    else:
+        optional.append("资源规格：CPU 核数、内存 GB、GPU 数量；不填时会使用任务类型默认画像")
+    latency = requirement.get("latency_target_ms")
+    if latency is not None:
+        recognized.append(f"时延目标 `{_format_number(latency)} ms`")
+    else:
+        optional.append("时延目标：例如 `50ms`；没有硬性要求可说明 `无硬性时延`")
+    bandwidth = requirement.get("bandwidth_mbps")
+    if bandwidth is not None:
+        recognized.append(f"带宽要求 `{_format_number(bandwidth)} Mbps`")
+    else:
+        optional.append("网络带宽：例如 `100Mbps`；不填则根据节点网络画像预估")
+    budget = requirement.get("budget_limit")
+    if budget is not None:
+        recognized.append(f"预算上限 `{_format_number(budget)}`")
+    else:
+        optional.append("预算上限：例如 `30`；如果只要求低成本，也可以说 `优先省钱`")
+    security = requirement.get("security_level")
+    if security:
+        recognized.append(f"安全等级 `{_security_label(security)}`")
+    else:
+        optional.append("安全等级：低 / 中 / 高；高安全会启用更强隔离和加密约束")
+    priority = requirement.get("priority")
+    priority_vector = requirement.get("priority_vector") or {}
+    if priority and priority != "balanced":
+        recognized.append(f"优化倾向 `{_priority_label(priority)}`")
+    elif priority_vector:
+        recognized.append("优化倾向 " + "、".join(f"`{_priority_label(key)}={_format_number(value, 2)}`" for key, value in priority_vector.items()))
+    else:
+        optional.append("优化目标：低时延 / 低成本 / 高可靠 / 高安全 / 均衡")
     if not questions:
         questions = ["请补充业务类型、部署地域、时延目标、预算或安全等级中的关键信息。"]
     lines = ["### 需求理解", ""]
     if recognized:
         lines.extend(["**已识别**", *(f"- {item}" for item in recognized), ""])
+    if pending:
+        lines.extend(["**仍缺少的关键条件**", *(f"- {item}" for item in pending), ""])
     lines.extend(["**还需确认**", *(f"- {question}" for question in questions)])
+    if optional:
+        lines.extend(["", "**可选补充条件**", *(f"- {item}" for item in optional)])
+    availability = requirement_session.get("region_availability") or {}
+    online_regions = availability.get("online_regions") or {}
+    if online_regions:
+        region_text = "、".join(
+            f"{_display_region(region)} {count} 个在线"
+            for region, count in sorted(online_regions.items())
+            if count
+        )
+        if region_text:
+            lines.extend(["", "**当前库存提示**", f"- 当前可见在线地域：{region_text}。"])
     lines.append("\n补充以上信息后，我会生成可审计的调度推荐。")
     return "\n".join(lines)
+
+
+def _policy_options_response(comparison: dict[str, Any]) -> str:
+    options = comparison.get("options") or []
+    recommended = comparison.get("recommended_option") or {}
+    lines = [
+        "### 多方案策略对比",
+        "",
+        "我基于同一份需求生成了多个可选策略。底层调度仍由确定性评分完成，Hermes 负责组织方案、解释取舍，并等待你选择。",
+        "",
+        "| 方案 | 策略取向 | 推荐节点 | 稳定时延 | 预计成本 | SLA 概率 | 结论 |",
+        "| --- | --- | --- | ---: | ---: | ---: | --- |",
+    ]
+    for option in options:
+        conclusion = "可选"
+        if not option.get("feasible"):
+            conclusion = "不可下发"
+        elif recommended.get("policy_id") == option.get("policy_id"):
+            conclusion = "推荐"
+        lines.append(
+            "| {label} | {profile} | `{node}` | `{latency} ms` | `{cost}` | `{sla}` | **{conclusion}** |".format(
+                label=option.get("label", "--"),
+                profile=option.get("profile_name", option.get("profile", "--")),
+                node=option.get("selected_node") or "--",
+                latency=_format_number(option.get("expected_latency_ms")),
+                cost=_format_number(option.get("expected_cost")),
+                sla=_format_percent(option.get("sla_probability")),
+                conclusion=conclusion,
+            )
+        )
+    lines.extend(["", "**推荐判断**", f"- {comparison.get('explanation') or '请根据业务目标选择一个方案。'}"])
+    lines.extend(["", "**怎么选择**"])
+    for option in options:
+        if not option.get("feasible"):
+            reason = "当前约束下没有可执行候选"
+        elif option.get("profile") == "latency_first":
+            reason = "适合线上推理、交互式服务或对响应速度更敏感的场景"
+        elif option.get("profile") == "cost_first":
+            reason = "适合预算敏感、可接受略高时延的批处理或离线分析场景"
+        else:
+            reason = "适合希望兼顾稳定性、SLA 和成本的默认生产型选择"
+        lines.append(f"- **方案 {option.get('label')}（{option.get('profile_name')}）**：{reason}。")
+    lines.extend(
+        [
+            "",
+            "**下一步**",
+            "- 回复 `选 A`、`选 B`、`选 C`，或直接说 `用低成本方案`、`用推荐方案`。",
+            "- 选择后我会锁定对应策略，并开启 **正式下发** 按钮；聊天文本仍不会直接提交任务。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _selected_option_response(policy: dict[str, Any], simulation: dict[str, Any]) -> str:
+    return _policy_response(policy, simulation, prefix="已选择该候选方案，策略已锁定。")
+
+
+def _option_selection_help_response(options: dict[str, str]) -> str:
+    labels = sorted(label for label in options if len(label) == 1 and label.isalpha())
+    choices = "、".join(f"`选 {label}`" for label in labels) or "`用推荐方案`"
+    return (
+        "### 等待选择方案\n\n"
+        f"我已经生成了多方案对比，请先回复 {choices}，"
+        "或说明 `用低成本方案`、`用低时延方案`、`用推荐方案`。\n\n"
+        "选择具体方案后，我会锁定对应策略，并开启 **正式下发** 按钮。"
+    )
 
 
 def _policy_response(policy: dict[str, Any], simulation: dict[str, Any], *, prefix: str | None = None) -> str:
@@ -928,6 +1269,24 @@ def _display_region(value: Any) -> str:
     return _REGION_LABELS.get(text.lower(), text)
 
 
+def _security_label(value: Any) -> str:
+    return {"low": "低", "medium": "中", "high": "高"}.get(str(value).lower(), str(value))
+
+
+def _priority_label(value: Any) -> str:
+    return {
+        "latency": "低时延",
+        "cost": "低成本",
+        "quality": "高可靠",
+        "balanced": "均衡",
+        "security": "高安全",
+        "network": "网络稳定",
+        "balance": "负载均衡",
+        "fragmentation": "资源碎片",
+        "locality": "局部性",
+    }.get(str(value).lower(), str(value))
+
+
 def _format_number(value: Any, digits: int = 1) -> str:
     if value is None:
         return "--"
@@ -1015,6 +1374,8 @@ def _tool_label(name: str) -> str:
         "start_requirement_dialogue": "需求澄清",
         "continue_requirement_dialogue": "更新需求",
         "draft_compute_network_policy": "生成策略",
+        "compare_policy_options": "多方案对比",
+        "explain_policy": "锁定方案",
         "simulate_policy": "策略仿真",
         "commit_policy": "正式下发",
         "optimize_policy_from_feedback": "优化策略",
@@ -1034,6 +1395,10 @@ def _short_result(result: dict[str, Any]) -> str:
         return f"cluster nodes={len(result.get('nodes', []))} online={online} regions={','.join(regions) or '--'}"
     if "policy_id" in result:
         return f"policy={result.get('policy_id')} status={result.get('status')}"
+    if result.get("status") == "compared" and "options" in result:
+        feasible = sum(1 for option in result.get("options", []) if option.get("feasible"))
+        recommended = result.get("recommended_option") or {}
+        return f"policy_options={len(result.get('options', []))} feasible={feasible} recommended={recommended.get('label', '--')}"
     if "session_id" in result:
         summary = f"requirement_session={result.get('session_id')} status={result.get('status')} questions={len(result.get('questions') or [])}"
         availability = result.get("region_availability") or {}
@@ -1064,6 +1429,26 @@ def _compact_artifacts(artifacts: dict[str, Any]) -> dict[str, Any]:
                 "feasible": value.get("feasible"),
                 "status": value.get("status"),
                 "diagnostics": value.get("diagnostics"),
+            }
+        elif key == "policy_options" and isinstance(value, dict):
+            compact[key] = {
+                "status": value.get("status"),
+                "recommended_policy_id": value.get("recommended_policy_id"),
+                "explanation": value.get("explanation"),
+                "options": [
+                    {
+                        "label": option.get("label"),
+                        "profile": option.get("profile"),
+                        "profile_name": option.get("profile_name"),
+                        "policy_id": option.get("policy_id"),
+                        "feasible": option.get("feasible"),
+                        "selected_node": option.get("selected_node"),
+                        "expected_latency_ms": option.get("expected_latency_ms"),
+                        "expected_cost": option.get("expected_cost"),
+                        "sla_probability": option.get("sla_probability"),
+                    }
+                    for option in value.get("options", [])
+                ],
             }
         elif key == "requirement_session" and isinstance(value, dict):
             compact[key] = {

@@ -43,6 +43,15 @@ class TianjunToolService:
                 overrides=args.get("overrides"),
                 execution=args.get("execution"),
             )
+        if tool_name == "compare_policy_options":
+            return self.compare_policy_options(
+                requirement=args.get("requirement"),
+                message=args.get("message"),
+                session_id=args.get("session_id"),
+                overrides=args.get("overrides"),
+                execution=args.get("execution"),
+                option_profiles=args.get("option_profiles"),
+            )
         if tool_name == "simulate_policy":
             return self.simulate_policy(str(args["policy_id"]))
         if tool_name == "explain_policy":
@@ -101,6 +110,34 @@ class TianjunToolService:
 
     def simulate_policy(self, policy_id: str) -> dict[str, Any]:
         return self.control_plane.simulate_policy(policy_id)
+
+    def compare_policy_options(
+        self,
+        requirement: dict[str, Any] | None = None,
+        *,
+        message: str | None = None,
+        session_id: str | None = None,
+        overrides: dict[str, Any] | None = None,
+        execution: dict[str, Any] | None = None,
+        option_profiles: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if session_id is not None:
+            comparison = self.control_plane.compare_policy_options_from_session(
+                str(session_id),
+                execution_payload=execution,
+                option_profiles=option_profiles,
+            )
+        else:
+            if requirement is None:
+                if message is None:
+                    raise ValueError("Either requirement, message or session_id is required.")
+                requirement = self.control_plane.parse_requirement(str(message), overrides=overrides)
+            comparison = self.control_plane.compare_policy_options(
+                requirement,
+                execution_payload=execution,
+                option_profiles=option_profiles,
+            )
+        return comparison
 
     def explain_policy(self, policy_id: str) -> dict[str, Any]:
         return self.control_plane.get_policy(policy_id)

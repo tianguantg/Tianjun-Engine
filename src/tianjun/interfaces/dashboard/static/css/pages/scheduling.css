@@ -118,18 +118,24 @@
 .hermes-drawer {
   position: fixed;
   z-index: 19;
-  right: clamp(1rem, 3vw, 4rem);
-  bottom: clamp(1.5rem, 3.5vh, 3rem);
-  width: min(76rem, calc(100vw - 3rem));
-  max-height: min(80vh, 56rem);
-  overflow: visible;
+  top: clamp(5.25rem, 9vh, 6.75rem);
+  right: clamp(.75rem, 2vw, 1.5rem);
+  bottom: clamp(.75rem, 2vh, 1.5rem);
+  width: min(74rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 3rem);
+  height: calc(100vh - clamp(5.25rem, 9vh, 6.75rem) - clamp(.75rem, 2vh, 1.5rem));
+  min-height: min(38rem, calc(100vh - 6rem));
+  overflow: hidden;
 }
 
 .hermes-drawer .agent-workbench {
-  max-height: min(80vh, 56rem);
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(18rem, 1fr) auto auto auto auto auto;
-  overflow: auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: clamp(1.25rem, 1.8vw, 1.75rem);
   padding-bottom: clamp(1.75rem, 2vw, 2.25rem);
@@ -144,18 +150,57 @@
 
 .agent-workbench,
 .chat-log,
+.workbench-body,
+.conversation-stack,
+.conversation-dock,
+.assistant-side,
 .composer,
 .hermes-runtime,
 .tool-steps {
+  min-width: 0;
   display: grid;
   gap: var(--space-sm);
 }
 
+.workbench-body {
+  min-height: 0;
+  grid-template-columns: minmax(34rem, 1fr) minmax(18rem, 24rem);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.conversation-stack {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.assistant-side {
+  min-height: 0;
+  align-content: start;
+  overflow: auto;
+  padding-left: var(--space-xs);
+}
+
+.conversation-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-top: var(--space-xs);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-bg-card) 0%, transparent),
+    var(--color-bg-card) 22%
+  );
+}
+
 .chat-log {
-  min-height: clamp(18rem, 34vh, 24rem);
-  max-height: min(40vh, 34rem);
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   padding-right: var(--space-xs);
+  padding-bottom: var(--space-sm);
+  align-content: start;
 }
 
 .message {
@@ -174,8 +219,8 @@
 
 .message.user {
   justify-self: end;
-  width: min(74%, 52rem);
-  max-width: 58rem;
+  width: min(86%, 46rem);
+  max-width: 100%;
   background: var(--color-primary-50);
 }
 
@@ -192,7 +237,9 @@
   background: transparent;
   color: var(--color-gray-900);
   line-height: 1.7;
-  min-height: 5.25rem;
+  min-height: 3.75rem;
+  max-height: 8rem;
+  resize: vertical;
 }
 
 .parse-panel .kv-grid,
@@ -202,11 +249,67 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.parse-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.parse-panel summary {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: .65rem var(--space-md);
+  cursor: pointer;
+  color: var(--color-gray-700);
+  list-style: none;
+}
+
+.parse-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.parse-panel summary span {
+  font-weight: 700;
+  color: var(--color-gray-900);
+}
+
+.parse-panel summary b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-primary-700);
+  font-size: .9rem;
+}
+
+.parse-panel summary::after {
+  content: "展开";
+  flex: 0 0 auto;
+  padding: .2rem .55rem;
+  border-radius: 999rem;
+  background: var(--color-primary-50);
+  color: var(--color-primary-700);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.parse-panel[open] summary::after {
+  content: "收起";
+}
+
+.parse-panel .kv-grid {
+  max-height: 10rem;
+  overflow: auto;
+  padding: 0 var(--space-md) var(--space-md);
+}
+
 .hermes-drawer .parse-panel .kv-grid,
 .hermes-drawer .context-grid,
 .hermes-drawer .hermes-runtime,
 .hermes-drawer .hidden-summary {
-  grid-template-columns: repeat(4, minmax(9rem, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .tool-trace-panel,
@@ -219,15 +322,19 @@
 }
 
 .tool-trace-panel {
-  max-height: 12rem;
+  max-height: none;
   overflow: auto;
+}
+
+#workspaceRisk {
+  margin-block: .25rem;
 }
 
 .composer-actions,
 .tool-trace-head {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-sm);
 }
 
@@ -263,14 +370,14 @@
   }
 
   .hermes-drawer {
-    width: min(64rem, calc(100vw - 2rem));
+    width: min(70rem, calc(100vw - 2rem));
   }
 
   .hermes-drawer .parse-panel .kv-grid,
   .hermes-drawer .context-grid,
   .hermes-drawer .hermes-runtime,
   .hermes-drawer .hidden-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   }
 }
 
@@ -287,11 +394,20 @@
 
   .hermes-drawer .agent-workbench {
     max-height: 100%;
-    grid-template-rows: auto minmax(18rem, 1fr) auto auto auto auto auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workbench-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .assistant-side {
+    max-height: 15rem;
   }
 
   .chat-log {
-    min-height: 18rem;
+    min-height: 0;
     max-height: none;
   }
 }
