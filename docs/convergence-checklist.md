@@ -72,7 +72,24 @@ python -B main.py mcp-server `
 
 ```powershell
 cd examples\cloudsimplus
+java -version
+mvn -version
 mvn -q -DskipTests compile
+```
+
+若 Maven 未加入 PATH，可使用完整路径或脚本：
+
+```powershell
+$MAVEN = "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
+& $MAVEN -version
+cd examples\cloudsimplus
+& $MAVEN -q -DskipTests compile
+```
+
+或从仓库根目录运行：
+
+```powershell
+.\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
 ```
 
 该检查不属于 Python 主项目必跑链；没有 Java 环境时，不应影响 `python -m pytest`、`python scripts\smoke_test.py` 或 `python scripts\convergence_check.py` 的结论。

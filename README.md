@@ -74,8 +74,26 @@ examples/cloudsimplus/src/main/resources/huawei-dci-reference.brite
 本仓库中的 `examples/cloudsimplus/` 已经是可直接运行的独立 Maven 工程，固定使用稳定版 `CloudSim Plus v8.5.7`。在该目录执行：
 
 ```powershell
+java -version
+mvn -version
 mvn clean compile
 mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
+```
+
+如果设备没有全局 Maven，或不方便修改系统 PATH，可以使用本地 Maven 完整路径：
+
+```powershell
+$MAVEN = "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
+& $MAVEN -version
+cd examples\cloudsimplus
+& $MAVEN clean compile
+& $MAVEN exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
+```
+
+也可以使用仓库脚本做 Java/Maven 版本检查和编译：
+
+```powershell
+.\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
 ```
 
 该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。

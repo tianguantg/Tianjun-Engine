@@ -16,10 +16,10 @@ src/main/resources/huawei-dci-reference.brite
 ## 环境要求
 
 - `JDK 17+`
-- `Maven 3.8+`
+- `Maven 3.8+`，推荐 `Maven 3.9.x`
 - 已安装本仓库 Python 依赖
 
-建议先确认本地 Java 工具链：
+建议先确认本地 Java 工具链。`mvn -version` 很重要，因为它会显示 Maven 实际使用的 Java，可能和终端里的 `java -version` 不同：
 
 ```powershell
 java -version
@@ -30,7 +30,7 @@ mvn -version
 
 - Python 3.10+
 - JDK 17
-- Maven 3.8+
+- Maven 3.9.x
 - CloudSim Plus 8.5.7
 - Tianjun HTTP server at `http://127.0.0.1:8024`
 
@@ -57,10 +57,27 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 
 ### 2. 编译 CloudSim Plus v8.5.7 示例
 
-在本目录执行：
+在本目录执行。若 Maven 已在 PATH 中：
 
 ```powershell
+mvn -version
 mvn clean compile
+```
+
+如果使用本地 Maven 完整路径，不需要修改系统 PATH：
+
+```powershell
+$MAVEN = "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
+& $MAVEN -version
+& $MAVEN clean compile
+```
+
+Linux/macOS 可使用：
+
+```sh
+MAVEN=/opt/apache-maven-3.9.9/bin/mvn
+"$MAVEN" -version
+"$MAVEN" clean compile
 ```
 
 `pom.xml` 已固定使用：
@@ -81,6 +98,20 @@ mvn clean compile
 mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 ```
 
+本地 Maven 完整路径方式：
+
+```powershell
+$MAVEN = "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
+& $MAVEN exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
+```
+
+Linux/macOS：
+
+```sh
+MAVEN=/opt/apache-maven-3.9.9/bin/mvn
+"$MAVEN" exec:java -Dexec.args="http://127.0.0.1:8024 normal"
+```
+
 可选参数顺序如下：
 
 ```text
@@ -91,6 +122,20 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 
 ```powershell
 mvn exec:java "-Dexec.args=http://127.0.0.1:8024 fault 36 20260527 output/huawei-dci-topology-snapshots.jsonl"
+```
+
+也可以用仓库脚本封装环境检查和编译：
+
+```powershell
+.\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
+.\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd" -RunExample
+```
+
+Linux/macOS：
+
+```sh
+./scripts/cloudsimplus_smoke.sh --maven-path /opt/apache-maven-3.9.9/bin/mvn
+./scripts/cloudsimplus_smoke.sh --maven-path /opt/apache-maven-3.9.9/bin/mvn --run-example
 ```
 
 ## 仿真内容
@@ -114,7 +159,10 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 fault 36 20260527 output/huawei
 ## 故障定位
 
 - `Unsupported class file major version`：检查 JDK 版本是否为 17 或更新。
-- `Could not resolve org.cloudsimplus`：检查 Maven Central、代理配置和本地 `~/.m2` 缓存。
+- `mvn` 找不到：安装 Maven 后加入 PATH，或按上文使用 `$MAVEN`/`MAVEN` 指向完整路径。
+- Maven 使用了错误的 JDK：运行 `mvn -version`，确认输出中的 Java version 是预期 JDK。
+- `Could not resolve org.cloudsimplus`：检查 Maven Central、代理配置和本地 `~/.m2` 缓存；必要时运行 `mvn -U clean compile`。
+- Maven 缓存损坏：可删除 CloudSimPlus 相关缓存后重试，例如 PowerShell 中运行 `Remove-Item -Recurse -Force "$env:USERPROFILE\.m2\repository\org\cloudsimplus"`。
 - `/health failed` 或提示控制平面不可达：先启动 Python 控制平面，并确认 `http://127.0.0.1:8024/health` 返回 `status=ok`。
 - `No DCI tasks were mapped by Tianjun`：检查节点注册、网络路径、调度约束和 `/schedule/commit` 响应。
 - 输出路径写入失败：检查 `output/` 目录权限，或传入可写的 `<outputPath>`。
