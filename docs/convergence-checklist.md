@@ -41,10 +41,12 @@ python -B main.py serve `
   --port 8024
 ```
 
-第二个终端启动 Java CloudSimPlus 仿真节点：
+第二个终端可选启动 Java CloudSimPlus DCI 示例：
 
 ```powershell
-java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 normal
+cd examples\cloudsimplus
+mvn clean compile
+mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 ```
 
 第三个终端启动 MCP server：
@@ -62,7 +64,18 @@ python -B main.py mcp-server `
 - `/dashboard` 能打开静态 Dashboard。
 - Dashboard 节点/拓扑页面能看到 CloudSimPlus 注册的仿真节点。
 - MCP host 可通过 `mcp-server` 访问 Tianjun 工具。
-- CloudSimPlus 桥接器注册拓扑和节点，发送心跳，并报告任务结果。
+- CloudSimPlus 示例注册拓扑和节点，发送心跳，并通过 `/schedule/commit` 和 `/task-runs/result` 完成兼容式直接调度 smoke flow。
+
+## 可选 Java 示例检查
+
+有 JDK 17 和 Maven 3.8+ 时，可单独验证 CloudSimPlus 示例能编译：
+
+```powershell
+cd examples\cloudsimplus
+mvn -q -DskipTests compile
+```
+
+该检查不属于 Python 主项目必跑链；没有 Java 环境时，不应影响 `python -m pytest`、`python scripts\smoke_test.py` 或 `python scripts\convergence_check.py` 的结论。
 
 ## 运行时检查
 

@@ -59,9 +59,11 @@ Invoke-RestMethod http://127.0.0.1:8024/health
 Invoke-RestMethod http://127.0.0.1:8024/report
 ```
 
-### 4. 启动 Java CloudSimPlus 仿真节点
+### 4. 可选：启动 Java CloudSimPlus DCI 示例
 
-标准演示链路使用 Java CloudSimPlus 仿真节点。CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
+CloudSimPlus 示例用于本地演示、DCI 参考实验和 HTTP API 兼容性验证。它不是 Tianjun Engine 的正式仿真后端，不参与 Python 包安装，也不替代真实节点代理的 lease-based 执行链路。
+
+CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
 
 ```text
 examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/HuaweiDciTianjunExperiment.java
@@ -86,7 +88,7 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 http://127.0.0.1:8024/dashboard
 ```
 
-Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 桥接器或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；任务执行由节点侧进程通过租约、进度和结果回报推进。
+Dashboard 是静态 HTML/CSS/JS，无构建步骤。启动 CloudSimPlus 示例或真实节点代理后，节点/拓扑页面应能看到已注册节点；聊天和策略流程使用官方 `/chat/sessions*` API；真实任务执行由节点侧进程通过租约、进度和结果回报推进。
 
 ### 6. 启动 MCP 工具服务
 

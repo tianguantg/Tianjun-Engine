@@ -42,6 +42,8 @@
 | POST | `/schedule/preview` | CloudSimPlus 兼容的调度预览 |
 | POST | `/schedule/commit` | CloudSimPlus 兼容的直接提交 |
 
+CloudSimPlus 兼容路由用于 `examples/cloudsimplus/` 参考实验，不是正式节点代理租约协议。`/schedule/preview` 成功时返回 `status=preview`；`/schedule/commit` 成功时返回 `status=scheduled` 并包含 `node_id`、`total_score` 和 `lease`。不可调度时，两者返回稳定 rejected shape：`status=rejected`、空 `node_id`、`total_score=0.0`、`preview_decision=null`、`lease=null` 和 `reason`。
+
 ## 遗留路由
 
 这些路由为了兼容性仍然可用，但已弃用：

@@ -39,6 +39,7 @@ import org.cloudsimplus.vms.VmSimple;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Runs a three-access-point DCI topology against the Tianjun HTTP control plane.
@@ -62,6 +64,7 @@ public final class HuaweiDciTianjunExperiment {
     private static final String[] REGIONS = {"dc1", "dc2", "dc3"};
     private static final String[] LOCATIONS = {"beijing", "hangzhou", "chengdu", "chongqing", "guangzhou", "shenzhen"};
     private static final String[] SERVICE_REGIONS = {"east", "east", "west", "west", "south", "south"};
+    private static final Set<String> SUPPORTED_SCENARIOS = Set.of("normal", "fault", "fault-active");
     private static final int[] LOCATION_SITES = {0, 0, 1, 1, 2, 2};
     private static final int VMS_PER_LOCATION = 4;
     private static final int DEFAULT_CLOUDLETS = 36;
@@ -85,6 +88,7 @@ public final class HuaweiDciTianjunExperiment {
     private final Map<Long, Vm> selectedVmByCloudletId;
     private final Random random;
     private final Gson gson;
+    private final String controlPlaneServer;
     private final String disturbanceScenario;
     private final String experimentRunId;
     private final BufferedWriter snapshotWriter;
@@ -106,9 +110,13 @@ public final class HuaweiDciTianjunExperiment {
         final long seed,
         final Path outputPath
     ) throws IOException {
+        final String normalizedScenario = validateScenario(disturbanceScenario);
+        validateServer(server);
+        validateCloudletCount(cloudletCount);
         this.simulation = new CloudSimPlus();
         this.bridge = new TianjunHttpBridge(server);
-        this.disturbanceScenario = disturbanceScenario.toLowerCase(Locale.ROOT);
+        this.controlPlaneServer = server;
+        this.disturbanceScenario = normalizedScenario;
         this.experimentRunId = "dci-" + this.disturbanceScenario + "-" + seed;
         this.random = new Random(seed);
         this.gson = new GsonBuilder().disableHtmlEscaping().create();
@@ -132,7 +140,7 @@ public final class HuaweiDciTianjunExperiment {
     private void run() throws IOException {
         if (!bridge.isHealthy()) {
             snapshotWriter.close();
-            throw new IllegalStateException("Tianjun control plane is not reachable at the configured server.");
+            throw new IllegalStateException("Tianjun control plane /health is not reachable at " + controlPlaneServer + ".");
         }
 
         broker.setDatacenterMapper((lastDatacenter, vm) -> datacenters.get(siteIndexForVm(vm)));
@@ -251,8 +259,22 @@ public final class HuaweiDciTianjunExperiment {
             final Cloudlet cloudlet = cloudletList.get(index);
             final SimTask task = taskForCloudlet(cloudlet, index);
             final SchedulingResult decision = bridge.commitSchedule(task);
+            if (!decision.hasDecision()) {
+                System.out.printf(
+                    "Tianjun rejected task %s: %s%n",
+                    task.taskId(),
+                    decision.rawJson()
+                );
+                continue;
+            }
             final Vm selectedVm = vmByNodeId.get(decision.nodeId());
             if (selectedVm == null || selectedVm == Vm.NULL) {
+                System.out.printf(
+                    "Tianjun selected unknown node %s for task %s: %s%n",
+                    decision.nodeId(),
+                    task.taskId(),
+                    decision.rawJson()
+                );
                 continue;
             }
             selectedVmByCloudletId.put(cloudlet.getId(), selectedVm);
@@ -262,6 +284,11 @@ public final class HuaweiDciTianjunExperiment {
         }
         broker.setVmMapper(cloudlet -> selectedVmByCloudletId.getOrDefault(cloudlet.getId(), Vm.NULL));
         System.out.printf("Tianjun mapped %d/%d DCI tasks.%n", mapped, cloudletList.size());
+        if (mapped == 0) {
+            throw new IllegalStateException(
+                "No DCI tasks were mapped by Tianjun; check node registration, task requirements, and /schedule/commit responses."
+            );
+        }
     }
 
     private void onClockTick(final EventInfo event) {
@@ -509,5 +536,32 @@ public final class HuaweiDciTianjunExperiment {
 
     private static double clamp(final double value, final double min, final double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static void validateServer(final String server) {
+        final URI uri = URI.create(server);
+        final String scheme = uri.getScheme();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+            throw new IllegalArgumentException("Server must be an http/https URL: " + server);
+        }
+        if (uri.getHost() == null || uri.getHost().isBlank()) {
+            throw new IllegalArgumentException("Server URL must include a host: " + server);
+        }
+    }
+
+    private static String validateScenario(final String scenario) {
+        final String normalized = scenario.toLowerCase(Locale.ROOT);
+        if (!SUPPORTED_SCENARIOS.contains(normalized)) {
+            throw new IllegalArgumentException(
+                "Unsupported scenario '" + scenario + "'. Supported scenarios: normal, fault, fault-active."
+            );
+        }
+        return normalized;
+    }
+
+    private static void validateCloudletCount(final int cloudletCount) {
+        if (cloudletCount <= 0) {
+            throw new IllegalArgumentException("cloudletCount must be greater than 0.");
+        }
     }
 }

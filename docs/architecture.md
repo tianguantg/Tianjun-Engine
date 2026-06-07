@@ -8,7 +8,7 @@ Tianjun Engine 围绕公共适配器、中央控制平面门面和可测试的�
 2. `ChatRuntime` 区分普通聊天、需求解析、策略选择和提交确认。
 3. HTTP、聊天和 MCP 工具统一调用 `CentralControlPlane`。
 4. 控制平面门面协调策略工作流、确定性调度、任务租约和执行反馈。
-5. CloudSimPlus 桥接器或真实节点代理注册节点、发送心跳、领取任务并报告进度/结果。
+5. CloudSimPlus 示例或真实节点代理注册节点、发送心跳，并通过各自协议推进任务执行回报。
 6. `/report`、`/health` 和 Dashboard 展示节点、任务、策略、执行和模型状态。
 
 ## 主要子系统
@@ -21,7 +21,7 @@ Tianjun Engine 围绕公共适配器、中央控制平面门面和可测试的�
 | MCP 适配器 | 通过 HTTP 包装器向 MCP 主机暴露工具 |
 | 控制平面门面 | 为 HTTP、聊天、MCP 和测试提供稳定 API |
 | 调度引擎 | 确定性节点过滤和多目标评分 |
-| 仿真/节点代理 | 节点注册、心跳、任务领取、进度和结果回报 |
+| 仿真/节点代理 | CloudSimPlus 兼容式直接调度、真实节点租约领取、心跳和结果回报 |
 
 ## 控制平面服务边界
 
@@ -37,13 +37,15 @@ Tianjun Engine 围绕公共适配器、中央控制平面门面和可测试的�
 
 ## CloudSimPlus 仿真链路
 
-标准演示链路使用 `examples/cloudsimplus/` 中的 Java CloudSimPlus 桥接器。它会：
+`examples/cloudsimplus/` 中的 Java CloudSimPlus 工程是可选 DCI 参考实验和 HTTP API bridge smoke target，不是 Tianjun Engine 的正式仿真后端。它会：
 
 - 调用 `/topology/register` 注册 DCI 物理拓扑。
 - 调用 `/nodes/register` 注册 CloudSimPlus 仿真 VM 节点。
 - 持续调用 `/nodes/heartbeat` 上报在线状态。
-- 通过 `/schedule/commit` 请求 Tianjun 控制平面做调度决策。
+- 通过 `/schedule/commit` 请求 Tianjun 控制平面做兼容式直接调度。
 - 在 CloudSimPlus 仿真完成后通过 `/task-runs/result` 回报执行结果。
+
+真实节点代理使用 `/leases/next` 领取租约，并通过 `/task-runs/progress` 和 `/task-runs/result` 回报执行状态。CloudSimPlus 示例不代表正式 lease-based execution backend。
 
 完整启动命令见 [README.md](../README.md)。
 

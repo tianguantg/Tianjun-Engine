@@ -346,7 +346,11 @@ def build_http_server(
 
             if task.task_id not in control_plane.tasks:
                 control_plane.submit_task(task)
-            return control_plane.schedule_pending_task(task.task_id)
+            result = control_plane.schedule_pending_task(task.task_id)
+            if result.get("status") == "committed":
+                result = dict(result)
+                result["status"] = "scheduled"
+            return result
 
         def _dashboard_payload_from_chat_result(self, result: dict[str, Any]) -> dict[str, Any] | None:
             artifacts = result.get("artifacts") or {}

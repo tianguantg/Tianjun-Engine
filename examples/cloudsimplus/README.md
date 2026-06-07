@@ -2,6 +2,8 @@
 
 本目录提供一个可直接运行的独立 Maven 示例工程，用于把 `CloudSim Plus v8.5.7` 仿真节点接入 Tianjun Engine 控制平面。
 
+该示例是可选的 DCI 参考实验和 HTTP API bridge smoke target，不是 Tianjun Engine 的正式仿真后端。它不会参与 Python 包安装，不作为生产执行器，也不承诺在线重调度语义。
+
 目录布局如下：
 
 ```text
@@ -16,6 +18,21 @@ src/main/resources/huawei-dci-reference.brite
 - `JDK 17+`
 - `Maven 3.8+`
 - 已安装本仓库 Python 依赖
+
+建议先确认本地 Java 工具链：
+
+```powershell
+java -version
+mvn -version
+```
+
+已知可复现环境：
+
+- Python 3.10+
+- JDK 17
+- Maven 3.8+
+- CloudSim Plus 8.5.7
+- Tianjun HTTP server at `http://127.0.0.1:8024`
 
 ## 启动顺序
 
@@ -93,3 +110,11 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 fault 36 20260527 output/huawei
 - 输出拓扑快照到 `output/`
 
 `DC1/DC2` 遵循项目 README 中描述的公开案例抽象。`DC3` 是用于三区域实验的可复现模拟扩展，不是声称的生产网络站点。
+
+## 故障定位
+
+- `Unsupported class file major version`：检查 JDK 版本是否为 17 或更新。
+- `Could not resolve org.cloudsimplus`：检查 Maven Central、代理配置和本地 `~/.m2` 缓存。
+- `/health failed` 或提示控制平面不可达：先启动 Python 控制平面，并确认 `http://127.0.0.1:8024/health` 返回 `status=ok`。
+- `No DCI tasks were mapped by Tianjun`：检查节点注册、网络路径、调度约束和 `/schedule/commit` 响应。
+- 输出路径写入失败：检查 `output/` 目录权限，或传入可写的 `<outputPath>`。

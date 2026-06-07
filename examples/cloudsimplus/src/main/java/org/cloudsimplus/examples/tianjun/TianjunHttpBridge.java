@@ -1,5 +1,10 @@
 package org.cloudsimplus.examples.tianjun;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,23 +15,20 @@ import java.time.Duration;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Minimal HTTP bridge between CloudSim Plus and the Python Tianjun control plane.
  */
 public class TianjunHttpBridge {
-    private static final Pattern NODE_ID_PATTERN = Pattern.compile("\"node_id\"\\s*:\\s*\"([^\"]+)\"");
-    private static final Pattern STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"");
-    private static final Pattern SCORE_PATTERN = Pattern.compile("\"total_score\"\\s*:\\s*([0-9.]+)");
-    private static final Pattern LEASE_TASK_PATTERN = Pattern.compile("\"lease\"\\s*:\\s*\\{\\s*\"task_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final int ERROR_BODY_LIMIT = 800;
 
     private final HttpClient client;
+    private final Gson gson;
     private final String server;
 
     public TianjunHttpBridge(final String server) {
         this.server = stripTrailingSlash(server);
+        this.gson = new Gson();
         this.client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
@@ -35,8 +37,11 @@ public class TianjunHttpBridge {
     public boolean isHealthy() {
         try {
             final String body = get("/health");
-            return body.contains("\"ok\"");
-        } catch (IOException | InterruptedException e) {
+            final JsonObject root = parseObject(body, "/health");
+            return "ok".equalsIgnoreCase(stringField(root, "status", ""));
+        } catch (IOException | JsonParseException | IllegalStateException e) {
+            return false;
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         }
@@ -119,18 +124,23 @@ public class TianjunHttpBridge {
 
     public SchedulingResult previewSchedule(final SimTask task) {
         final String response = post("/schedule/preview", taskJson(task));
-        final String status = matchString(STATUS_PATTERN, response, "unknown");
-        final String nodeId = matchString(NODE_ID_PATTERN, response, "");
-        final double score = matchDouble(SCORE_PATTERN, response, 0.0);
+        final JsonObject root = parseObject(response, "/schedule/preview");
+        final String status = stringField(root, "status", "unknown");
+        final String nodeId = stringField(root, "node_id", "");
+        final double score = doubleField(root, "total_score", 0.0);
         return new SchedulingResult(status, nodeId, task.taskId(), score, response);
     }
 
     public SchedulingResult commitSchedule(final SimTask task) {
         final String response = post("/schedule/commit", taskJson(task));
-        final String status = matchString(STATUS_PATTERN, response, "unknown");
-        final String nodeId = matchString(NODE_ID_PATTERN, response, "");
-        final String leaseTaskId = matchString(LEASE_TASK_PATTERN, response, task.taskId());
-        final double score = matchDouble(SCORE_PATTERN, response, 0.0);
+        final JsonObject root = parseObject(response, "/schedule/commit");
+        final String status = stringField(root, "status", "unknown");
+        final String nodeId = stringField(root, "node_id", "");
+        final double score = doubleField(root, "total_score", 0.0);
+        String leaseTaskId = task.taskId();
+        if (root.has("lease") && root.get("lease").isJsonObject()) {
+            leaseTaskId = stringField(root.getAsJsonObject("lease"), "task_id", task.taskId());
+        }
         return new SchedulingResult(status, nodeId, leaseTaskId, score, response);
     }
 
@@ -144,7 +154,11 @@ public class TianjunHttpBridge {
             .timeout(Duration.ofSeconds(15))
             .GET()
             .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)).body();
+        final HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (response.statusCode() >= 400) {
+            throw new IllegalStateException(apiError("GET", path, response.statusCode(), response.body()));
+        }
+        return response.body();
     }
 
     private String post(final String path, final String json) {
@@ -157,14 +171,14 @@ public class TianjunHttpBridge {
         try {
             final HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() >= 400) {
-                throw new IllegalStateException("Tianjun API " + path + " failed: " + response.body());
+                throw new IllegalStateException(apiError("POST", path, response.statusCode(), response.body()));
             }
             return response.body();
         } catch (IOException e) {
-            throw new IllegalStateException("Cannot reach Tianjun API " + server + path, e);
+            throw new IllegalStateException("Cannot reach Tianjun API POST " + server + path, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while calling Tianjun API " + server + path, e);
+            throw new IllegalStateException("Interrupted while calling Tianjun API POST " + server + path, e);
         }
     }
 
@@ -393,14 +407,47 @@ public class TianjunHttpBridge {
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
-    private static String matchString(final Pattern pattern, final String text, final String fallback) {
-        final Matcher matcher = pattern.matcher(text);
-        return matcher.find() ? matcher.group(1) : fallback;
+    private JsonObject parseObject(final String body, final String path) {
+        final JsonElement parsed = gson.fromJson(body, JsonElement.class);
+        if (parsed == null || !parsed.isJsonObject()) {
+            throw new JsonParseException("Tianjun API " + server + path + " did not return a JSON object.");
+        }
+        return parsed.getAsJsonObject();
     }
 
-    private static double matchDouble(final Pattern pattern, final String text, final double fallback) {
-        final Matcher matcher = pattern.matcher(text);
-        return matcher.find() ? Double.parseDouble(matcher.group(1)) : fallback;
+    private static String stringField(final JsonObject root, final String key, final String fallback) {
+        if (!root.has(key) || root.get(key).isJsonNull()) {
+            return fallback;
+        }
+        try {
+            return root.get(key).getAsString();
+        } catch (ClassCastException | IllegalStateException | NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static double doubleField(final JsonObject root, final String key, final double fallback) {
+        if (!root.has(key) || root.get(key).isJsonNull()) {
+            return fallback;
+        }
+        try {
+            return root.get(key).getAsDouble();
+        } catch (ClassCastException | IllegalStateException | NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private String apiError(final String method, final String path, final int statusCode, final String body) {
+        return "Tianjun API " + method + " " + server + path
+            + " failed with HTTP " + statusCode
+            + "; response body: " + truncate(body);
+    }
+
+    private static String truncate(final String value) {
+        if (value == null || value.length() <= ERROR_BODY_LIMIT) {
+            return value == null ? "" : value;
+        }
+        return value.substring(0, ERROR_BODY_LIMIT) + "...";
     }
 
     private static double clamp(final double value, final double min, final double max) {
