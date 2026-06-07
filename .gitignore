@@ -12,6 +12,8 @@ tianjun.toml
 *.log
 *.db
 *.sqlite
+.tools/
+examples/cloudsimplus/target/
 
 data/alibaba_microservices_v2022/
 runtime_report.json

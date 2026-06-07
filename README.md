@@ -69,10 +69,11 @@ examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/tianjun/TianjunHtt
 examples/cloudsimplus/src/main/resources/huawei-dci-reference.brite
 ```
 
-将这些文件放入本地 CloudSim Plus Examples 工程对应路径后运行实验，并把 Tianjun 控制平面地址作为第一个参数传入：
+本仓库中的 `examples/cloudsimplus/` 已经是可直接运行的独立 Maven 工程，固定使用稳定版 `CloudSim Plus v8.5.7`。在该目录执行：
 
 ```powershell
-java org.cloudsimplus.examples.HuaweiDciTianjunExperiment http://127.0.0.1:8024 normal
+mvn clean compile
+mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 ```
 
 该实验会创建 24 个仿真 VM，注册 DCI 拓扑和节点，持续发送心跳，通过 Tianjun 控制平面提交调度任务，并在 CloudSimPlus 仿真完成后回传执行结果。
