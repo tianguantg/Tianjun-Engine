@@ -518,7 +518,7 @@ public class TianjunHttpBridge {
     ) {
     }
 
-    public record SchedulingResult(String status, String nodeId, String leaseTaskId, double score, String rawJson) {
+    public record SchedulingResult(String status, String nodeId, String taskId, double totalScore, String rawJson) {
         public boolean hasDecision() {
             return nodeId != null && !nodeId.isBlank() && ("leased".equalsIgnoreCase(status) || "scheduled".equalsIgnoreCase(status));
         }
