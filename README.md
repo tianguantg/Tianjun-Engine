@@ -2,7 +2,7 @@
 
 Tianjun Engine 是一个本地优先的算网调度控制平面原型。它把自然语言需求对话、确定性多目标调度、可选 ML 辅助预测、执行反馈、MCP 工具和静态 Dashboard 连接成一个可运行的研究系统。
 
-本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册节点、仿真后端、CloudSimPlus 桥接器或真实节点代理；LLM 可以解释和帮助解析意图，但不能在没有明确确认路径的情况下捏造控制平面事实或提交工作。
+本项目用于研究、演示和架构实验，并非生产级云平台。资源清单、定价、拓扑和执行事实必须来自已注册节点、可选 CloudSimPlus DCI 示例或真实节点代理；LLM 可以解释和帮助解析意图，但不能在没有明确确认路径的情况下捏造控制平面事实或提交工作。
 
 ## 快速开始
 
@@ -63,7 +63,7 @@ Invoke-RestMethod http://127.0.0.1:8024/report
 
 CloudSimPlus 示例用于本地演示、DCI 参考实验和 HTTP API 兼容性验证。它不是 Tianjun Engine 的正式仿真后端，不参与 Python 包安装，也不替代真实节点代理的 lease-based 执行链路。
 
-CloudSimPlus 桥接器和参考实验位于 `examples/cloudsimplus/`：
+CloudSimPlus DCI 示例和 HTTP 兼容桥接代码位于 `examples/cloudsimplus/`：
 
 ```text
 examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/HuaweiDciTianjunExperiment.java
@@ -71,9 +71,10 @@ examples/cloudsimplus/src/main/java/org/cloudsimplus/examples/tianjun/TianjunHtt
 examples/cloudsimplus/src/main/resources/huawei-dci-reference.brite
 ```
 
-本仓库中的 `examples/cloudsimplus/` 已经是可直接运行的独立 Maven 工程，固定使用稳定版 `CloudSim Plus v8.5.7`。在该目录执行：
+本仓库中的 `examples/cloudsimplus/` 已经是可直接运行的独立 Maven 工程，固定使用稳定版 `CloudSim Plus v8.5.7`。从仓库根目录执行：
 
 ```powershell
+cd examples\cloudsimplus
 java -version
 mvn -version
 mvn clean compile
@@ -83,9 +84,9 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 如果设备没有全局 Maven，或不方便修改系统 PATH，可以使用本地 Maven 完整路径：
 
 ```powershell
+cd examples\cloudsimplus
 $MAVEN = "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
 & $MAVEN -version
-cd examples\cloudsimplus
 & $MAVEN clean compile
 & $MAVEN exec:java "-Dexec.args=http://127.0.0.1:8024 normal"
 ```
@@ -152,22 +153,24 @@ python scripts\smoke_test.py --port 8135
 
 ```mermaid
 flowchart LR
-    User["User / Dashboard"] --> Chat["ChatRuntime"]
-    MCP["MCP host"] --> MCPServer["FastMCP adapter"]
-    Chat --> Tools["Tianjun tools"]
-    MCPServer --> HTTP["HTTP API"]
-    HTTP --> CP["CentralControlPlane facade"]
-    Tools --> CP
-    CP --> Scheduler["ClosedLoopAdaptiveScheduler"]
+    CLI["CLI / API / MCP / Dashboard"] --> CP["Tianjun control plane"]
+    CP --> Chat["ChatRuntime"]
     CP --> Policy["PolicyWorkflowService"]
     CP --> Requirements["RequirementDialogueService"]
     CP --> Nodes["NodeRegistry"]
+    CP --> Scheduler["ClosedLoopAdaptiveScheduler"]
+    Scheduler --> Compat["CloudSimPlus compat route<br/>/schedule/commit"]
+    Compat --> CloudSim["CloudSimPlus DCI example"]
     CP --> Leases["TaskLeaseService"]
-    Scheduler --> ML["Optional LSTM / GraphSAGE runtime"]
-    Leases --> Agents["CloudSimPlus / real-agent"]
-    Agents --> Results["Progress and results"]
+    Leases --> Agent["real-agent<br/>/leases/next"]
+    CloudSim --> Results["Task results"]
+    Agent --> Results
     Results --> CP
+    CP --> Dash["Dashboard"]
+    CP --> Store["SQLite audit store"]
 ```
+
+CloudSimPlus uses the compatibility scheduling route (`/schedule/commit`) for the optional DCI example. Real agents use the lease-based execution path (`/leases/next`). CloudSimPlus is not the production execution backend.
 
 核心入口：
 

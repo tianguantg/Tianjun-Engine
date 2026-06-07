@@ -33,10 +33,19 @@ Check these files when applicable:
 * `docs/dashboard-test-checklist.md` for Dashboard behavior that needs manual verification
 * `docs/experiments-dci.md` for experiment data, model assets, and reproducibility notes
 * `docs/convergence-checklist.md` for the final architecture convergence validation commands and static checks
+* `AGENTS.md` for coding-agent instructions, validation claims, encoding rules, and repository hygiene
 
 Documentation does not need to be long. Prefer short updates that keep future readers from guessing why a code path exists or how it should be used.
 
 This file is also part of the maintained documentation. If the contribution process changes, update `CONTRIBUTING.md` together with the code or workflow change.
+
+When contribution rules, validation commands, encoding requirements, documentation layout, generated-file rules, or agent instructions change, update both `CONTRIBUTING.md` and `AGENTS.md` as needed.
+
+## Coding agents
+
+If you are an AI coding agent or automated editing tool, read `AGENTS.md` before making changes.
+
+`CONTRIBUTING.md` describes the human contribution and review process. `AGENTS.md` contains operational rules for automated edits, encoding, validation claims, and repository hygiene.
 
 ## Architecture expectations
 

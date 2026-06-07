@@ -94,6 +94,8 @@ cd examples\cloudsimplus
 
 该检查不属于 Python 主项目必跑链；没有 Java 环境时，不应影响 `python -m pytest`、`python scripts\smoke_test.py` 或 `python scripts\convergence_check.py` 的结论。
 
+CloudSimPlus checks are optional for Python-only changes. If Java, Maven, or CloudSimPlus example files changed, run the CloudSimPlus smoke check or explicitly state why it was not run.
+
 ## 运行时检查
 
 - 官方聊天路由 `/chat/sessions` 可以创建会话。

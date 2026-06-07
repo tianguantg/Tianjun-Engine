@@ -124,9 +124,11 @@ MAVEN=/opt/apache-maven-3.9.9/bin/mvn
 mvn exec:java "-Dexec.args=http://127.0.0.1:8024 fault 36 20260527 output/huawei-dci-topology-snapshots.jsonl"
 ```
 
-也可以用仓库脚本封装环境检查和编译：
+也可以从仓库根目录使用 smoke 脚本封装环境检查和编译：
 
 ```powershell
+cd ..\..
+.\scripts\cloudsimplus_smoke.ps1
 .\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd"
 .\scripts\cloudsimplus_smoke.ps1 -MavenPath "C:\tools\apache-maven-3.9.9\bin\mvn.cmd" -RunExample
 ```
@@ -134,9 +136,13 @@ mvn exec:java "-Dexec.args=http://127.0.0.1:8024 fault 36 20260527 output/huawei
 Linux/macOS：
 
 ```sh
+cd ../..
+./scripts/cloudsimplus_smoke.sh
 ./scripts/cloudsimplus_smoke.sh --maven-path /opt/apache-maven-3.9.9/bin/mvn
 ./scripts/cloudsimplus_smoke.sh --maven-path /opt/apache-maven-3.9.9/bin/mvn --run-example
 ```
+
+The smoke scripts must be run from the repository root.
 
 ## 仿真内容
 
