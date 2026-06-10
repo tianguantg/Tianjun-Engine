@@ -42,6 +42,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,10 +71,16 @@ public final class HuaweiDciTianjunExperiment {
     private static final int VMS_PER_LOCATION = 4;
     private static final int DEFAULT_CLOUDLETS = 36;
     private static final long DEFAULT_SEED = 20260527L;
+    private static final DateTimeFormatter RUN_ID_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final double HEARTBEAT_INTERVAL_SECONDS = 5.0;
     private static final double LOCAL_FABRIC_LATENCY_MS = 0.8;
     private static final double LOCAL_FABRIC_BANDWIDTH_MBPS = 25_000.0;
     private static final double DCI_BOTTLENECK_BANDWIDTH_MBPS = 10_000.0;
+    private static final double VM_DESTRUCTION_DELAY_SECONDS = 600.0;
+    private static final double CLOUDLET_RAM_UTILIZATION_MIN = 0.04;
+    private static final double CLOUDLET_RAM_UTILIZATION_RANGE = 0.08;
+    private static final double CLOUDLET_BW_UTILIZATION_MIN = 0.03;
+    private static final double CLOUDLET_BW_UTILIZATION_RANGE = 0.08;
 
     private final CloudSimPlus simulation;
     private final DatacenterBroker broker;
@@ -100,7 +108,8 @@ public final class HuaweiDciTianjunExperiment {
         final int cloudlets = args.length > 2 ? Integer.parseInt(args[2]) : DEFAULT_CLOUDLETS;
         final long seed = args.length > 3 ? Long.parseLong(args[3]) : DEFAULT_SEED;
         final Path output = Path.of(args.length > 4 ? args[4] : "output/huawei-dci-topology-snapshots.jsonl");
-        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output).run();
+        final String runId = args.length > 5 ? args[5] : "";
+        new HuaweiDciTianjunExperiment(server, scenario, cloudlets, seed, output, runId).run();
     }
 
     private HuaweiDciTianjunExperiment(
@@ -108,7 +117,8 @@ public final class HuaweiDciTianjunExperiment {
         final String disturbanceScenario,
         final int cloudletCount,
         final long seed,
-        final Path outputPath
+        final Path outputPath,
+        final String runId
     ) throws IOException {
         final String normalizedScenario = validateScenario(disturbanceScenario);
         validateServer(server);
@@ -117,7 +127,7 @@ public final class HuaweiDciTianjunExperiment {
         this.bridge = new TianjunHttpBridge(server);
         this.controlPlaneServer = server;
         this.disturbanceScenario = normalizedScenario;
-        this.experimentRunId = "dci-" + this.disturbanceScenario + "-" + seed;
+        this.experimentRunId = normalizeRunId(runId, this.disturbanceScenario, seed);
         this.random = new Random(seed);
         this.gson = new GsonBuilder().disableHtmlEscaping().create();
         this.vmByNodeId = new LinkedHashMap<>();
@@ -126,7 +136,8 @@ public final class HuaweiDciTianjunExperiment {
         this.selectedNodeByCloudletId = new LinkedHashMap<>();
         this.selectedVmByCloudletId = new LinkedHashMap<>();
         this.datacenters = createDatacenters();
-        this.broker = new DatacenterBrokerSimple(simulation);
+        this.broker = new DatacenterBrokerSimple(simulation)
+            .setVmDestructionDelay(VM_DESTRUCTION_DELAY_SECONDS);
         this.topology = configureDciTopology();
         this.vmList = createVms();
         this.cloudletList = createCloudlets(cloudletCount);
@@ -161,10 +172,17 @@ public final class HuaweiDciTianjunExperiment {
 
         final var finished = broker.getCloudletFinishedList();
         System.out.printf("=== Huawei-reference DCI Tianjun experiment (%s) ===%n", disturbanceScenario);
+        System.out.printf("Run id: %s%n", experimentRunId);
         System.out.printf("Topology: DC1 -> Border1 -> PE1 -> IPCORE -> PE3 -> Border2 -> DC2, plus PE3 -> Border3 -> DC3%n");
         System.out.printf("Simulation nodes: %d, submitted tasks: %d, finished: %d%n", vmList.size(), cloudletList.size(), finished.size());
         System.out.printf("Max cross-site propagation baseline: %.3f ms, DCI bottleneck: %.0f Mbps%n", maxCrossSiteBaseLatencyMs(), DCI_BOTTLENECK_BANDWIDTH_MBPS);
         new CloudletsTableBuilder(finished).build();
+        if (finished.size() != cloudletList.size()) {
+            throw new IllegalStateException(
+                "CloudSimPlus finished " + finished.size() + "/" + cloudletList.size()
+                    + " submitted tasks; inspect bandwidth constraints, VM destruction delay, and CloudletScheduler warnings."
+            );
+        }
     }
 
     private List<Datacenter> createDatacenters() {
@@ -233,8 +251,12 @@ public final class HuaweiDciTianjunExperiment {
             cloudlet.setFileSize(2_048L + index % 6 * 512L)
                 .setOutputSize(1_024L)
                 .setUtilizationModelCpu(new UtilizationModelDynamic(0.40 + random.nextDouble() * 0.42))
-                .setUtilizationModelRam(new UtilizationModelDynamic(0.18 + random.nextDouble() * 0.25))
-                .setUtilizationModelBw(new UtilizationModelDynamic(0.12 + random.nextDouble() * 0.38));
+                .setUtilizationModelRam(new UtilizationModelDynamic(
+                    CLOUDLET_RAM_UTILIZATION_MIN + random.nextDouble() * CLOUDLET_RAM_UTILIZATION_RANGE
+                ))
+                .setUtilizationModelBw(new UtilizationModelDynamic(
+                    CLOUDLET_BW_UTILIZATION_MIN + random.nextDouble() * CLOUDLET_BW_UTILIZATION_RANGE
+                ));
             result.add(cloudlet);
         }
         return result;
@@ -563,5 +585,16 @@ public final class HuaweiDciTianjunExperiment {
         if (cloudletCount <= 0) {
             throw new IllegalArgumentException("cloudletCount must be greater than 0.");
         }
+    }
+
+    private static String normalizeRunId(final String runId, final String scenario, final long seed) {
+        final String value = runId == null || runId.isBlank()
+            ? "dci-" + scenario + "-" + seed + "-" + RUN_ID_TIMESTAMP_FORMAT.format(LocalDateTime.now())
+            : runId.strip();
+        final String sanitized = value.replaceAll("[^A-Za-z0-9._-]", "-");
+        if (sanitized.isBlank()) {
+            throw new IllegalArgumentException("runId must contain at least one ASCII letter, digit, dot, underscore, or hyphen.");
+        }
+        return sanitized;
     }
 }
